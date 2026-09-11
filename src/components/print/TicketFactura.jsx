@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { EMPRESA, PRINT_WIDTHS } from '../../utils/constants';
+import { getEmpresaConfig, PRINT_WIDTHS } from '../../utils/constants';
 import { formatUSD, formatBs, formatFecha, formatTasa } from '../../utils/formatters';
 import { HiOutlinePrinter, HiOutlineXMark } from 'react-icons/hi2';
 
 export default function TicketFactura({ factura, onClose, initialWidth = '80mm' }) {
   const [selectedWidth, setSelectedWidth] = useState(initialWidth);
   const config = PRINT_WIDTHS[selectedWidth] || PRINT_WIDTHS['80mm'];
+  const empresa = getEmpresaConfig();
 
   function handlePrint() {
     window.print();
@@ -17,6 +18,27 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
   const vendedor = factura.vendedor || factura.usuarios;
   const tasa = factura.tasa || factura.tasas_cambio;
   const metodosPago = factura.metodos_pago_detalle || factura.metodos_pago || [];
+
+  // Calculate IVA & breakdown if not explicitly present on the object
+  const gravados = detalles.filter(d => d.aplica_iva !== false);
+  const exentos = detalles.filter(d => d.aplica_iva === false);
+
+  const subtotalGravadoUSD = factura.subtotal_gravado_usd ?? gravados.reduce((sum, item) => {
+    const p = item.precio_unitario || item.precio_unitario_usd || 0;
+    return sum + (item.subtotal || item.subtotal_usd || item.cantidad * p);
+  }, 0);
+
+  const subtotalExentoUSD = factura.subtotal_exento_usd ?? exentos.reduce((sum, item) => {
+    const p = item.precio_unitario || item.precio_unitario_usd || 0;
+    return sum + (item.subtotal || item.subtotal_usd || item.cantidad * p);
+  }, 0);
+
+  const ivaUSD = factura.iva_usd ?? gravados.reduce((sum, item) => {
+    const p = item.precio_unitario || item.precio_unitario_usd || 0;
+    const sub = item.subtotal || item.subtotal_usd || item.cantidad * p;
+    const pct = item.porcentaje_iva ?? empresa.iva_porcentaje ?? 16;
+    return sum + (sub * (pct / 100));
+  }, 0);
 
   return (
     <div className="ticket-overlay">
@@ -49,10 +71,13 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
       <div id="ticket-container" className="ticket" style={{ width: config.width }}>
         {/* Header */}
         <div className="ticket__header">
-          <img src={EMPRESA.logo} alt="DJ7" className="ticket__logo" />
-          <div className="ticket__empresa">{EMPRESA.nombre}</div>
-          <div style={{ fontSize: '9px', color: '#555' }}>RIF: J-50123456-7</div>
-          <div style={{ fontSize: '9px', color: '#555' }}>Caracas, Venezuela</div>
+          {empresa.logo && <img src={empresa.logo} alt="Logo" className="ticket__logo" />}
+          <div className="ticket__empresa">{empresa.nombre}</div>
+          <div style={{ fontSize: '9px', color: '#555' }}>RIF: {empresa.rif}</div>
+          <div style={{ fontSize: '9px', color: '#555' }}>{empresa.direccion}</div>
+          {empresa.telefono && (
+            <div style={{ fontSize: '9px', color: '#555' }}>Tlf: {empresa.telefono}</div>
+          )}
         </div>
 
         <div className="ticket__divider" />
@@ -102,9 +127,15 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
             {detalles.map((item, i) => {
               const precio = item.precio_unitario || item.precio_unitario_usd || 0;
               const subtotal = item.subtotal || item.subtotal_usd || (item.cantidad * precio);
+              const isExento = item.aplica_iva === false;
               return (
                 <tr key={i}>
-                  <td>{item.producto_nombre || item.nombre}</td>
+                  <td>
+                    {item.producto_nombre || item.nombre}
+                    <span style={{ fontSize: '8px', color: '#777', marginLeft: '3px' }}>
+                      ({isExento ? 'E' : 'G'})
+                    </span>
+                  </td>
                   <td style={{ textAlign: 'center' }}>{item.cantidad}</td>
                   <td style={{ textAlign: 'right' }}>{formatUSD(subtotal)}</td>
                 </tr>
@@ -119,8 +150,26 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
         <div className="ticket__totals">
           <div className="ticket__row">
             <span>Subtotal:</span>
-            <span>{formatUSD(factura.subtotal_usd || factura.total_usd)}</span>
+            <span>{formatUSD(factura.subtotal_usd || (subtotalGravadoUSD + subtotalExentoUSD))}</span>
           </div>
+          {subtotalGravadoUSD > 0 && (
+            <div className="ticket__row" style={{ fontSize: '9px', color: '#555' }}>
+              <span>Base Imp. (G):</span>
+              <span>{formatUSD(subtotalGravadoUSD)}</span>
+            </div>
+          )}
+          {subtotalExentoUSD > 0 && (
+            <div className="ticket__row" style={{ fontSize: '9px', color: '#555' }}>
+              <span>Exento (E):</span>
+              <span>{formatUSD(subtotalExentoUSD)}</span>
+            </div>
+          )}
+          {ivaUSD > 0 && (
+            <div className="ticket__row">
+              <span>IVA ({empresa.iva_porcentaje || 16}%):</span>
+              <span>{formatUSD(ivaUSD)}</span>
+            </div>
+          )}
           {factura.descuento_usd > 0 && (
             <div className="ticket__row">
               <span>Descuento:</span>
@@ -168,10 +217,11 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
 
         {/* Footer */}
         <div className="ticket__footer">
-          <p style={{ fontWeight: '600', marginBottom: '2px' }}>{EMPRESA.slogan}</p>
+          <p style={{ fontWeight: '600', marginBottom: '2px' }}>{empresa.slogan}</p>
           <p style={{ fontSize: '8px', color: '#666' }}>Documento de entrega / comprobante de venta interno</p>
         </div>
       </div>
     </div>
   );
 }
+

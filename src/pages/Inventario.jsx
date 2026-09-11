@@ -18,6 +18,7 @@ export default function Inventario() {
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({
     sku: '', nombre: '', descripcion: '', precio_usd: '', stock: '', stock_minimo: '5', categoria_id: '', activo: true,
+    aplica_iva: true, porcentaje_iva: '16',
   });
   const [catForm, setCatForm] = useState({ nombre: '', descripcion: '' });
 
@@ -42,6 +43,8 @@ export default function Inventario() {
       stock: parseInt(form.stock),
       stock_minimo: parseInt(form.stock_minimo),
       categoria_id: form.categoria_id || null,
+      aplica_iva: !!form.aplica_iva,
+      porcentaje_iva: form.aplica_iva ? (parseFloat(form.porcentaje_iva) || 16) : 0,
     };
 
     try {
@@ -91,12 +94,17 @@ export default function Inventario() {
       precio_usd: producto.precio_usd.toString(), stock: producto.stock.toString(),
       stock_minimo: producto.stock_minimo.toString(), categoria_id: producto.categoria_id || '',
       activo: producto.activo,
+      aplica_iva: producto.aplica_iva !== false,
+      porcentaje_iva: (producto.porcentaje_iva ?? 16).toString(),
     });
     setShowModal(true);
   }
 
   function resetForm() {
-    setForm({ sku: '', nombre: '', descripcion: '', precio_usd: '', stock: '', stock_minimo: '5', categoria_id: '', activo: true });
+    setForm({
+      sku: '', nombre: '', descripcion: '', precio_usd: '', stock: '', stock_minimo: '5',
+      categoria_id: '', activo: true, aplica_iva: true, porcentaje_iva: '16'
+    });
   }
 
   const productosFiltrados = productos.filter(p => {
@@ -143,6 +151,7 @@ export default function Inventario() {
                 <th>Nombre</th>
                 <th>Categoría</th>
                 <th>Precio USD</th>
+                <th>Impuesto</th>
                 <th>Stock</th>
                 <th>Estado</th>
                 <th>Acciones</th>
@@ -155,6 +164,11 @@ export default function Inventario() {
                   <td>{p.nombre}</td>
                   <td>{p.categorias?.nombre || '—'}</td>
                   <td>{formatUSD(p.precio_usd)}</td>
+                  <td>
+                    <span className={`badge ${p.aplica_iva === false ? 'badge--ghost' : 'badge--primary'}`}>
+                      {p.aplica_iva === false ? 'Exento (0%)' : `IVA ${p.porcentaje_iva ?? 16}%`}
+                    </span>
+                  </td>
                   <td>
                     <span className={`badge ${p.stock <= p.stock_minimo ? (p.stock === 0 ? 'badge--danger' : 'badge--warning') : 'badge--success'}`}>
                       {p.stock}
@@ -174,7 +188,7 @@ export default function Inventario() {
                 </tr>
               ))}
               {productosFiltrados.length === 0 && (
-                <tr><td colSpan="7" className="table__empty">No se encontraron productos</td></tr>
+                <tr><td colSpan="8" className="table__empty">No se encontraron productos</td></tr>
               )}
             </tbody>
           </table>
@@ -218,6 +232,33 @@ export default function Inventario() {
                   <input type="number" min="0" value={form.stock_minimo} onChange={e => setForm({...form, stock_minimo: e.target.value})} required />
                 </div>
               </div>
+              
+              <div className="form-row" style={{ background: '#181818', padding: '0.75rem', borderRadius: '6px', border: '1px solid #282828' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="checkbox-label" style={{ fontWeight: 600 }}>
+                    <input
+                      type="checkbox"
+                      checked={form.aplica_iva}
+                      onChange={e => setForm({ ...form, aplica_iva: e.target.checked })}
+                    />
+                    Aplica Impuesto (IVA)
+                  </label>
+                </div>
+                {form.aplica_iva && (
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label>Porcentaje IVA (%)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.porcentaje_iva}
+                      onChange={e => setForm({ ...form, porcentaje_iva: e.target.value })}
+                      required
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="form-row">
                 <div className="form-group">
                   <label>Categoría</label>
@@ -238,6 +279,7 @@ export default function Inventario() {
           </div>
         </div>
       )}
+
 
       {/* Category Modal */}
       {showCatModal && (

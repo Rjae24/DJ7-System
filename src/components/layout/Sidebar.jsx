@@ -15,6 +15,7 @@ import {
   HiOutlineBars3,
   HiOutlineXMark,
   HiOutlineDocumentChartBar,
+  HiOutlineCog6Tooth,
 } from 'react-icons/hi2';
 
 const adminLinks = [
@@ -28,7 +29,9 @@ const adminLinks = [
   { to: '/tasa-cambio', icon: HiOutlineCurrencyDollar, label: 'Tasa de Cambio' },
   { to: '/usuarios', icon: HiOutlineUserGroup, label: 'Usuarios' },
   { to: '/historial', icon: HiOutlineDocumentText, label: 'Historial Facturas' },
+  { to: '/configuracion', icon: HiOutlineCog6Tooth, label: 'Configuración' },
 ];
+
 
 const vendedorLinks = [
   { to: '/pos', icon: HiOutlineShoppingCart, label: 'Punto de Venta' },

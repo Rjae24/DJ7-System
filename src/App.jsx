@@ -14,6 +14,7 @@ import TasaCambio from './pages/TasaCambio';
 import Usuarios from './pages/Usuarios';
 import HistorialFacturas from './pages/HistorialFacturas';
 import Reportes from './pages/Reportes';
+import Configuracion from './pages/Configuracion';
 
 function AppRoutes() {
   const { user, loading, isAdmin } = useAuth();
@@ -62,7 +63,11 @@ function AppRoutes() {
         <Route path="/historial" element={
           <ProtectedRoute requiereAdmin><HistorialFacturas /></ProtectedRoute>
         } />
+        <Route path="/configuracion" element={
+          <ProtectedRoute requiereAdmin><Configuracion /></ProtectedRoute>
+        } />
       </Route>
+
 
       <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
     </Routes>
