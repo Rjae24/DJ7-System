@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatFecha } from '../utils/formatters';
 import toast from 'react-hot-toast';
+import Pagination from '../components/common/Pagination';
 import { HiOutlinePlus, HiOutlinePencilSquare, HiOutlineMagnifyingGlass } from 'react-icons/hi2';
 
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ nombre: '', documento_identidad: '', telefono: '', direccion: '', email: '' });
@@ -55,6 +57,13 @@ export default function Clientes() {
     !search || c.nombre.toLowerCase().includes(search.toLowerCase()) || c.documento_identidad.toLowerCase().includes(search.toLowerCase())
   );
 
+  const pageSize = 20;
+  const clientesPaginados = clientesFiltrados.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
   if (loading) return <div className="page-loading"><div className="loading-spinner" /><p>Cargando clientes...</p></div>;
 
   return (
@@ -87,7 +96,7 @@ export default function Clientes() {
               </tr>
             </thead>
             <tbody>
-              {clientesFiltrados.map(c => (
+              {clientesPaginados.map(c => (
                 <tr key={c.id}>
                   <td>{c.nombre}</td>
                   <td><code>{c.documento_identidad}</code></td>
@@ -105,6 +114,12 @@ export default function Clientes() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={clientesFiltrados.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {showModal && (

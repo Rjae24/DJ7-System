@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatUSD, formatBs, formatFecha, formatTasa } from '../utils/formatters';
 import toast from 'react-hot-toast';
+import Pagination from '../components/common/Pagination';
 import {
   HiOutlineDocumentChartBar,
   HiOutlineArrowDownTray,
@@ -17,6 +18,8 @@ import {
 export default function Reportes() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('ventas'); // 'ventas' | 'inventario' | 'metodos'
+  const [pageVentas, setPageVentas] = useState(1);
+  const [pageInventario, setPageInventario] = useState(1);
 
   // Date filters (defaults: last 30 days)
   const now = new Date();
@@ -389,7 +392,7 @@ export default function Reportes() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ventas.map(f => (
+                  {ventas.slice((pageVentas - 1) * 20, pageVentas * 20).map(f => (
                     <tr key={f.id} className={f.estado === 'anulada' ? 'table__row--muted' : ''}>
                       <td><code>{f.numero_factura}</code></td>
                       <td>{formatFecha(f.fecha_emision, true)}</td>
@@ -410,6 +413,12 @@ export default function Reportes() {
                 </tbody>
               </table>
             </div>
+            <Pagination
+              currentPage={pageVentas}
+              totalItems={ventas.length}
+              pageSize={20}
+              onPageChange={setPageVentas}
+            />
           </div>
         </div>
       )}
@@ -452,7 +461,7 @@ export default function Reportes() {
                   </tr>
                 </thead>
                 <tbody>
-                  {inventario.map(p => {
+                  {inventario.slice((pageInventario - 1) * 20, pageInventario * 20).map(p => {
                     const totalProdUSD = p.stock * parseFloat(p.precio_usd || 0);
                     const totalProdBs = totalProdUSD * tasaBsRef;
                     const esBajo = p.stock <= p.stock_minimo;
@@ -475,6 +484,12 @@ export default function Reportes() {
                 </tbody>
               </table>
             </div>
+            <Pagination
+              currentPage={pageInventario}
+              totalItems={inventario.length}
+              pageSize={20}
+              onPageChange={setPageInventario}
+            />
           </div>
         </div>
       )}

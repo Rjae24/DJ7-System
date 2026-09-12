@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatUSD, formatFecha } from '../utils/formatters';
 import toast from 'react-hot-toast';
+import Pagination from '../components/common/Pagination';
 import {
   HiOutlinePlus, HiOutlinePencilSquare, HiOutlineTrash,
   HiOutlineMagnifyingGlass, HiOutlineFunnel,
@@ -13,6 +14,7 @@ export default function Inventario() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
   const [editando, setEditando] = useState(null);
@@ -111,6 +113,14 @@ export default function Inventario() {
     return matchSearch && matchCat;
   });
 
+  const pageSize = 20;
+  const productosPaginados = productosFiltrados.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filtroCategoria]);
+
   if (loading) return <div className="page-loading"><div className="loading-spinner" /><p>Cargando inventario...</p></div>;
 
   return (
@@ -163,7 +173,7 @@ export default function Inventario() {
               </tr>
             </thead>
             <tbody>
-              {productosFiltrados.map(p => (
+              {productosPaginados.map(p => (
                 <tr key={p.id}>
                   <td><code>{p.sku}</code></td>
                   <td>{p.nombre}</td>
@@ -197,6 +207,12 @@ export default function Inventario() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={productosFiltrados.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Product Modal */}

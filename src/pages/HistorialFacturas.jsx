@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { formatUSD, formatBs, formatFecha, formatTasa } from '../utils/formatters';
 import toast from 'react-hot-toast';
 import TicketFactura from '../components/print/TicketFactura';
+import Pagination from '../components/common/Pagination';
 import {
   HiOutlineMagnifyingGlass, HiOutlinePrinter, HiOutlineEye,
   HiOutlineXCircle, HiOutlineFunnel,
@@ -15,6 +16,7 @@ export default function HistorialFacturas() {
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroFechaDesde, setFiltroFechaDesde] = useState('');
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [showDetalle, setShowDetalle] = useState(null);
   const [showTicket, setShowTicket] = useState(null);
 
@@ -95,6 +97,13 @@ export default function HistorialFacturas() {
     return matchSearch && matchEstado && matchDesde && matchHasta;
   });
 
+  const pageSize = 20;
+  const facturasPaginadas = facturasFiltradas.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filtroEstado, filtroFechaDesde, filtroFechaHasta]);
+
   if (loading) return <div className="page-loading"><div className="loading-spinner" /><p>Cargando historial...</p></div>;
 
   return (
@@ -137,7 +146,7 @@ export default function HistorialFacturas() {
               </tr>
             </thead>
             <tbody>
-              {facturasFiltradas.map(f => (
+              {facturasPaginadas.map(f => (
                 <tr key={f.id} className={f.estado === 'anulada' ? 'table__row--muted' : ''}>
                   <td><code>{f.numero_factura}</code></td>
                   <td>{f.clientes?.nombre}</td>
@@ -167,6 +176,12 @@ export default function HistorialFacturas() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={facturasFiltradas.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Detail Modal */}

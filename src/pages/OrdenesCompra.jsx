@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatUSD, formatFecha } from '../utils/formatters';
 import { ESTADOS_ORDEN } from '../utils/constants';
 import toast from 'react-hot-toast';
+import Pagination from '../components/common/Pagination';
 import {
   HiOutlinePlus, HiOutlineCheckCircle, HiOutlineXCircle,
   HiOutlineEye, HiOutlineTrash, HiOutlineMagnifyingGlass,
@@ -15,6 +16,7 @@ export default function OrdenesCompra() {
   const [proveedores, setProveedores] = useState([]);
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [showDetalle, setShowDetalle] = useState(null);
   const [form, setForm] = useState({ proveedor_id: '', notas: '', items: [{ producto_id: '', cantidad: 1, precio_unitario_usd: '' }] });
@@ -102,6 +104,9 @@ export default function OrdenesCompra() {
     setShowDetalle({ ...orden, detalles: data || [] });
   }
 
+  const pageSize = 20;
+  const ordenesPaginadas = ordenes.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   if (loading) return <div className="page-loading"><div className="loading-spinner" /><p>Cargando órdenes...</p></div>;
 
   return (
@@ -118,7 +123,7 @@ export default function OrdenesCompra() {
               <tr><th>N° Orden</th><th>Proveedor</th><th>Total USD</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr>
             </thead>
             <tbody>
-              {ordenes.map(o => (
+              {ordenesPaginadas.map(o => (
                 <tr key={o.id}>
                   <td><code>{o.numero_orden}</code></td>
                   <td>{o.proveedores?.nombre}</td>
@@ -146,6 +151,12 @@ export default function OrdenesCompra() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={ordenes.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Detail Modal */}

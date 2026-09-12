@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatFecha } from '../utils/formatters';
 import toast from 'react-hot-toast';
+import Pagination from '../components/common/Pagination';
 import { HiOutlinePlus, HiOutlinePencilSquare, HiOutlineMagnifyingGlass } from 'react-icons/hi2';
 
 export default function Proveedores() {
   const [proveedores, setProveedores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ nombre: '', rif: '', telefono: '', email: '', direccion: '', contacto_nombre: '', activo: true });
@@ -56,6 +58,13 @@ export default function Proveedores() {
     !search || p.nombre.toLowerCase().includes(search.toLowerCase()) || p.rif.toLowerCase().includes(search.toLowerCase())
   );
 
+  const pageSize = 20;
+  const paginados = filtrados.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
   if (loading) return <div className="page-loading"><div className="loading-spinner" /><p>Cargando proveedores...</p></div>;
 
   return (
@@ -81,7 +90,7 @@ export default function Proveedores() {
               <tr><th>Nombre</th><th>RIF</th><th>Teléfono</th><th>Contacto</th><th>Estado</th><th>Acciones</th></tr>
             </thead>
             <tbody>
-              {filtrados.map(p => (
+              {paginados.map(p => (
                 <tr key={p.id}>
                   <td>{p.nombre}</td>
                   <td><code>{p.rif}</code></td>
@@ -95,6 +104,12 @@ export default function Proveedores() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filtrados.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {showModal && (

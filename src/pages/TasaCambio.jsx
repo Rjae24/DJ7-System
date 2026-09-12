@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatTasa, formatFecha } from '../utils/formatters';
 import { fetchTasaBCV } from '../services/bcvService';
 import toast from 'react-hot-toast';
+import Pagination from '../components/common/Pagination';
 import {
   HiOutlinePlus,
   HiOutlineCurrencyDollar,
@@ -18,6 +19,7 @@ export default function TasaCambio() {
   const [tasas, setTasas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncingBCV, setSyncingBCV] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [nuevaTasa, setNuevaTasa] = useState('');
   const [bcvData, setBcvData] = useState(null);
@@ -292,18 +294,24 @@ export default function TasaCambio() {
               </tr>
             </thead>
             <tbody>
-              {tasas.map(t => (
+              {tasas.slice((currentPage - 1) * 20, currentPage * 20).map(t => (
                 <tr key={t.id}>
                   <td>{formatFecha(t.fecha_registro)}</td>
-                  <td><strong style={{ color: '#F5F5F5' }}>Bs {formatTasa(t.tasa_usd_bs)}</strong></td>
+                  <td><strong style={{ color: '#F5F5F5' }}>{formatTasa(t.tasa_usd_bs)}</strong></td>
                   <td>{t.usuarios?.nombre_completo || 'Sistema / BCV'}</td>
-                  <td style={{ color: '#A3A3A3' }}>Bs {(parseFloat(t.tasa_usd_bs) * 100).toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
+                  <td>Bs {(parseFloat(t.tasa_usd_bs) * 100).toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
                 </tr>
               ))}
               {tasas.length === 0 && <tr><td colSpan="4" className="table__empty">Sin registros</td></tr>}
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={tasas.length}
+          pageSize={20}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* New Rate Form Modal */}

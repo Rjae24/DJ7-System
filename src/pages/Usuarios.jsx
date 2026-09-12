@@ -3,12 +3,14 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { formatFecha } from '../utils/formatters';
 import toast from 'react-hot-toast';
+import Pagination from '../components/common/Pagination';
 import { HiOutlineUserPlus, HiOutlineLockClosed, HiOutlineLockOpen } from 'react-icons/hi2';
 
 export default function Usuarios() {
   const { createUser } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', nombre_completo: '', rol: 'vendedor' });
   const [creando, setCreando] = useState(false);
@@ -80,7 +82,7 @@ export default function Usuarios() {
               <tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Registrado</th><th>Acciones</th></tr>
             </thead>
             <tbody>
-              {usuarios.map(u => (
+              {usuarios.slice((currentPage - 1) * 20, currentPage * 20).map(u => (
                 <tr key={u.id}>
                   <td>{u.nombre_completo}</td>
                   <td>{u.email}</td>
@@ -111,6 +113,12 @@ export default function Usuarios() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={usuarios.length}
+          pageSize={20}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {showModal && (
