@@ -42,53 +42,53 @@ export default function Reportes() {
   async function loadReportes() {
     setLoading(true);
     try {
-      // 1. Fetch Invoices in date range
-      const { data: facturasData, error: fErr } = await supabase
-        .from('facturas')
-        .select(`
-          *,
-          clientes(nombre, documento_identidad),
-          usuarios!facturas_vendedor_id_fkey(nombre_completo),
-          tasas_cambio(tasa_usd_bs)
-        `)
-        .gte('fecha_emision', `${fechaDesde}T00:00:00`)
-        .lte('fecha_emision', `${fechaHasta}T23:59:59`)
-        .order('fecha_emision', { ascending: false });
+      // Execute main report queries in PARALLEL
+      const [
+        { data: facturasData, error: fErr },
+        { data: prodsData, error: pErr },
+        { data: rateData, error: rErr }
+      ] = await Promise.all([
+        supabase
+          .from('facturas')
+          .select(`
+            *,
+            clientes(nombre, documento_identidad),
+            usuarios!facturas_vendedor_id_fkey(nombre_completo),
+            tasas_cambio(tasa_usd_bs)
+          `)
+          .gte('fecha_emision', `${fechaDesde}T00:00:00`)
+          .lte('fecha_emision', `${fechaHasta}T23:59:59`)
+          .order('fecha_emision', { ascending: false }),
+        supabase
+          .from('productos')
+          .select('*, categorias(nombre)')
+          .eq('activo', true)
+          .order('nombre'),
+        supabase
+          .from('tasas_cambio')
+          .select('*')
+          .order('fecha_registro', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
       if (fErr) throw fErr;
+      if (pErr) throw pErr;
       setVentas(facturasData || []);
+      setInventario(prodsData || []);
+      setTasaActual(rateData);
 
-      // 2. Fetch invoice details for sold products stats
-      const facturaIds = (facturasData || []).filter(f => f.estado === 'emitida').map(f => f.id);
+      // Fetch invoice details for sold products stats (only for the filtered invoices, limited to 500)
+      const facturaIds = (facturasData || []).filter(f => f.estado === 'emitida').slice(0, 100).map(f => f.id);
       if (facturaIds.length > 0) {
         const { data: detallesData } = await supabase
           .from('detalles_factura')
-          .select('*')
+          .select('producto_nombre, cantidad, precio_unitario_usd, subtotal_usd')
           .in('factura_id', facturaIds);
         setDetallesVentas(detallesData || []);
       } else {
         setDetallesVentas([]);
       }
-
-      // 3. Fetch current products inventory
-      const { data: prodsData } = await supabase
-        .from('productos')
-        .select(`
-          *,
-          categorias(nombre)
-        `)
-        .eq('activo', true)
-        .order('nombre');
-      setInventario(prodsData || []);
-
-      // 4. Latest rate
-      const { data: rateData } = await supabase
-        .from('tasas_cambio')
-        .select('*')
-        .order('fecha_registro', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setTasaActual(rateData);
 
     } catch (error) {
       console.error('Error cargando reportes:', error);

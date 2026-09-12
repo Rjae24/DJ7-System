@@ -33,63 +33,42 @@ export default function Dashboard() {
       const hoyInicio = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const semanaInicio = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString();
       const mesInicio = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const hace30Dias = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30).toISOString();
 
       // Base query filter for vendedor
-      const vendedorFilter = !isAdmin ? { vendedor_id: profile.id } : null;
+      const vendedorId = !isAdmin ? profile.id : null;
 
-      // Ventas del día
-      let query = supabase
-        .from('facturas')
-        .select('total_usd')
-        .gte('fecha_emision', hoyInicio)
-        .eq('estado', 'emitida');
-      if (vendedorFilter) query = query.eq('vendedor_id', vendedorFilter.vendedor_id);
-      const { data: ventasHoyData } = await query;
+      // Prepare parallel queries
+      let qHoy = supabase.from('facturas').select('total_usd').gte('fecha_emision', hoyInicio).eq('estado', 'emitida');
+      let qSemana = supabase.from('facturas').select('total_usd').gte('fecha_emision', semanaInicio).eq('estado', 'emitida');
+      let qMes = supabase.from('facturas').select('total_usd, vendedor_id').gte('fecha_emision', mesInicio).eq('estado', 'emitida');
+      let qDiarias = supabase.from('facturas').select('total_usd, fecha_emision').gte('fecha_emision', hace30Dias).eq('estado', 'emitida').order('fecha_emision');
+      let qTasa = supabase.from('tasas_cambio').select('*').order('fecha_registro', { ascending: false }).limit(1).maybeSingle();
+      let qProds = isAdmin ? supabase.from('productos').select('id, nombre, sku, stock, stock_minimo').eq('activo', true) : Promise.resolve({ data: [] });
+      let qVendedores = isAdmin ? supabase.from('usuarios').select('id, nombre_completo').eq('rol', 'vendedor').eq('activo', true) : Promise.resolve({ data: [] });
+      let qDetalles = supabase.from('detalles_factura').select('producto_nombre, cantidad').order('created_at', { ascending: false }).limit(250);
 
-      // Ventas de la semana
-      let querySemana = supabase
-        .from('facturas')
-        .select('total_usd')
-        .gte('fecha_emision', semanaInicio)
-        .eq('estado', 'emitida');
-      if (vendedorFilter) querySemana = querySemana.eq('vendedor_id', vendedorFilter.vendedor_id);
-      const { data: ventasSemanaData } = await querySemana;
-
-      // Ventas del mes
-      let queryMes = supabase
-        .from('facturas')
-        .select('total_usd')
-        .gte('fecha_emision', mesInicio)
-        .eq('estado', 'emitida');
-      if (vendedorFilter) queryMes = queryMes.eq('vendedor_id', vendedorFilter.vendedor_id);
-      const { data: ventasMesData } = await queryMes;
-
-      // Tasa actual
-      const { data: tasaData } = await supabase
-        .from('tasas_cambio')
-        .select('*')
-        .order('fecha_registro', { ascending: false })
-        .limit(1)
-        .single();
-
-      // Productos con stock bajo (solo admin)
-      let productosStockBajo = [];
-      if (isAdmin) {
-        const { data } = await supabase
-          .from('productos')
-          .select('id, nombre, sku, stock, stock_minimo')
-          .eq('activo', true)
-          .filter('stock', 'lte', 'stock_minimo') // workaround: fetch all and filter
-        ;
-        // Manual filter since we can't compare columns directly
-        const { data: allProds } = await supabase
-          .from('productos')
-          .select('id, nombre, sku, stock, stock_minimo')
-          .eq('activo', true);
-        productosStockBajo = (allProds || []).filter(p => p.stock <= p.stock_minimo);
+      if (vendedorId) {
+        qHoy = qHoy.eq('vendedor_id', vendedorId);
+        qSemana = qSemana.eq('vendedor_id', vendedorId);
+        qMes = qMes.eq('vendedor_id', vendedorId);
+        qDiarias = qDiarias.eq('vendedor_id', vendedorId);
       }
 
+      // Execute queries in PARALLEL
+      const [
+        { data: ventasHoyData },
+        { data: ventasSemanaData },
+        { data: ventasMesData },
+        { data: facturasDiarias },
+        { data: tasaData },
+        { data: allProds },
+        { data: vendedoresData },
+        { data: detallesData },
+      ] = await Promise.all([qHoy, qSemana, qMes, qDiarias, qTasa, qProds, qVendedores, qDetalles]);
+
       const sumTotal = (arr) => (arr || []).reduce((sum, f) => sum + (parseFloat(f.total_usd) || 0), 0);
+      const productosStockBajo = (allProds || []).filter(p => p.stock <= p.stock_minimo);
 
       setStats({
         ventasHoy: sumTotal(ventasHoyData),
@@ -102,18 +81,7 @@ export default function Dashboard() {
         productosStockBajo,
       });
 
-      // Ventas diarias últimos 30 días
-      const hace30Dias = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30).toISOString();
-      let queryDiarias = supabase
-        .from('facturas')
-        .select('total_usd, fecha_emision')
-        .gte('fecha_emision', hace30Dias)
-        .eq('estado', 'emitida')
-        .order('fecha_emision');
-      if (vendedorFilter) queryDiarias = queryDiarias.eq('vendedor_id', vendedorFilter.vendedor_id);
-      const { data: facturasDiarias } = await queryDiarias;
-
-      // Group by day
+      // Group daily sales
       const porDia = {};
       (facturasDiarias || []).forEach(f => {
         const dia = new Date(f.fecha_emision).toLocaleDateString('es-VE', { day: '2-digit', month: 'short' });
@@ -121,14 +89,9 @@ export default function Dashboard() {
       });
       setVentasDiarias(Object.entries(porDia).map(([dia, total]) => ({ dia, total: parseFloat(total.toFixed(2)) })));
 
-      // Top 5 productos
-      let queryDetalles = supabase
-        .from('detalles_factura')
-        .select('producto_nombre, cantidad, factura_id');
-      const { data: detalles } = await queryDetalles;
-      
+      // Top 5 productos from recent sales
       const productoCount = {};
-      (detalles || []).forEach(d => {
+      (detallesData || []).forEach(d => {
         productoCount[d.producto_nombre] = (productoCount[d.producto_nombre] || 0) + d.cantidad;
       });
       const topProds = Object.entries(productoCount)
@@ -137,13 +100,10 @@ export default function Dashboard() {
         .map(([nombre, cantidad]) => ({ nombre, cantidad }));
       setTopProductos(topProds);
 
-      // Rendimiento por vendedor (solo admin)
-      if (isAdmin) {
-        const { data: vendedores } = await supabase.from('usuarios').select('id, nombre_completo').eq('rol', 'vendedor').eq('activo', true);
-        const { data: todasFacturas } = await supabase.from('facturas').select('vendedor_id, total_usd').gte('fecha_emision', mesInicio).eq('estado', 'emitida');
-        
-        const vendStats = (vendedores || []).map(v => {
-          const ventasVend = (todasFacturas || []).filter(f => f.vendedor_id === v.id);
+      // Rendimiento por vendedor
+      if (isAdmin && vendedoresData) {
+        const vendStats = (vendedoresData || []).map(v => {
+          const ventasVend = (ventasMesData || []).filter(f => f.vendedor_id === v.id);
           return {
             nombre: v.nombre_completo,
             total: ventasVend.reduce((sum, f) => sum + parseFloat(f.total_usd), 0),
