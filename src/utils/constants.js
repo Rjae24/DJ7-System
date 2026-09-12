@@ -41,7 +41,7 @@ export const ESTADOS_ORDEN = {
 // Configuración de impresión
 export const PRINT_WIDTHS = {
   '58mm': { width: '58mm', chars: 32, pixelWidth: '164px' },
-  '80mm': { width: '80mm', chars: 48, pixelWidth: '226px' },
+  '80mm': { width: '80mm', chars: 48, pixelWidth: '302px' },
 };
 
 // Configuración por defecto de la empresa
@@ -69,6 +69,9 @@ export function getEmpresaConfig() {
 export function saveEmpresaConfig(config) {
   try {
     localStorage.setItem('dj7_empresa_config', JSON.stringify(config));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('dj7_empresa_config_updated', { detail: config }));
+    }
   } catch (e) {
     console.error('Error guardando config de empresa:', e);
   }

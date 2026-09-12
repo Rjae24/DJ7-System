@@ -1,12 +1,44 @@
-import { useState } from 'react';
-import { getEmpresaConfig, PRINT_WIDTHS } from '../../utils/constants';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
+import { getEmpresaConfig, saveEmpresaConfig, DEFAULT_EMPRESA, PRINT_WIDTHS } from '../../utils/constants';
 import { formatUSD, formatBs, formatFecha, formatTasa } from '../../utils/formatters';
 import { HiOutlinePrinter, HiOutlineXMark } from 'react-icons/hi2';
 
 export default function TicketFactura({ factura, onClose }) {
-  const config = PRINT_WIDTHS['58mm'];
-  const empresa = getEmpresaConfig();
+  const config = PRINT_WIDTHS['80mm'];
+  const [empresa, setEmpresa] = useState(() => getEmpresaConfig());
   const logoUrl = '/logo-dj7-solo.png';
+
+  useEffect(() => {
+    // Sincronizar con Supabase si está disponible
+    supabase
+      .from('configuracion_empresa')
+      .select('*')
+      .eq('id', 'default')
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (data && !error) {
+          const cfg = {
+            nombre: data.nombre ?? DEFAULT_EMPRESA.nombre,
+            rif: data.rif ?? DEFAULT_EMPRESA.rif,
+            direccion: data.direccion ?? DEFAULT_EMPRESA.direccion,
+            telefono: data.telefono ?? DEFAULT_EMPRESA.telefono,
+            logo: data.logo || DEFAULT_EMPRESA.logo,
+            slogan: data.slogan ?? DEFAULT_EMPRESA.slogan,
+          };
+          setEmpresa(cfg);
+          saveEmpresaConfig(cfg);
+        }
+      })
+      .catch(console.error);
+
+    // Escuchar cambios en vivo desde la misma sesión
+    const handleUpdate = (e) => {
+      if (e.detail) setEmpresa(e.detail);
+    };
+    window.addEventListener('dj7_empresa_config_updated', handleUpdate);
+    return () => window.removeEventListener('dj7_empresa_config_updated', handleUpdate);
+  }, []);
 
   function handlePrint() {
     const ticketElem = document.getElementById('ticket-container');
@@ -35,90 +67,104 @@ export default function TicketFactura({ factura, onClose }) {
           <style>
             @page {
               margin: 0;
-              size: auto;
-            }
-            body {
-              margin: 0;
-              padding: 3mm 2mm;
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 11px;
-              line-height: 1.35;
-              color: #000;
-              background: #fff;
-              width: ${config.width};
+              size: 80mm auto;
             }
             * {
               box-sizing: border-box;
+              font-weight: bold !important;
+              color: #000 !important;
+            }
+            body {
+              margin: 0;
+              padding: 4mm 3mm;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 11.5px;
+              line-height: 1.35;
+              color: #000 !important;
+              background: #fff;
+              width: ${config.width};
+              max-width: ${config.width};
+              font-weight: bold !important;
             }
             .ticket__header {
               text-align: center;
               margin-bottom: 6px;
+              font-weight: bold !important;
             }
             .ticket__logo {
               display: block;
               margin: 0 auto 5px auto;
-              max-width: 54px;
+              max-width: 65px;
               width: auto;
               height: auto;
               object-fit: contain;
             }
             .ticket__empresa {
-              font-weight: bold;
-              font-size: 12px;
+              font-weight: bold !important;
+              font-size: 13.5px;
             }
             .ticket__divider {
-              border-top: 1px dashed #000;
-              margin: 5px 0;
+              border-top: 1.5px dashed #000;
+              margin: 6px 0;
             }
             .ticket__info {
-              margin-bottom: 4px;
+              margin-bottom: 5px;
+              font-weight: bold !important;
             }
             .ticket__row {
               display: flex;
               justify-content: space-between;
               gap: 4px;
+              font-weight: bold !important;
             }
             .ticket__row--bold {
-              font-weight: bold;
-              font-size: 12px;
+              font-weight: bold !important;
+              font-size: 13px;
             }
             .ticket__items {
               width: 100%;
               border-collapse: collapse;
+              font-weight: bold !important;
             }
             .ticket__items th {
-              font-size: 9px;
-              border-bottom: 1px solid #000;
-              padding: 2px 0;
+              font-size: 10.5px;
+              border-bottom: 1.5px solid #000;
+              padding: 3px 0;
               text-transform: uppercase;
+              font-weight: bold !important;
             }
             .ticket__items td {
-              padding: 2px 0;
-              font-size: 9.5px;
+              padding: 3px 0;
+              font-size: 11px;
               vertical-align: top;
+              font-weight: bold !important;
             }
             .ticket__item-sub {
-              font-size: 8.5px;
-              color: #444;
+              font-size: 10px;
+              color: #000 !important;
+              font-weight: bold !important;
               margin-top: 1px;
             }
             .ticket__totals {
-              margin: 4px 0;
+              margin: 6px 0;
+              font-weight: bold !important;
             }
             .ticket__section-title {
-              font-weight: bold;
-              font-size: 10px;
-              margin-bottom: 2px;
+              font-weight: bold !important;
+              font-size: 11.5px;
+              margin-bottom: 3px;
             }
             .ticket__ref {
-              font-size: 9px;
-              color: #444;
+              font-size: 10.5px;
+              color: #000 !important;
+              font-weight: bold !important;
               padding-left: 6px;
             }
             .ticket__footer {
               text-align: center;
               margin-top: 8px;
-              font-size: 9px;
+              font-size: 10px;
+              font-weight: bold !important;
             }
           </style>
         </head>
@@ -148,11 +194,24 @@ export default function TicketFactura({ factura, onClose }) {
   // Cantidad total de unidades/productos vendidos
   const totalCantidad = detalles.reduce((sum, item) => sum + (parseFloat(item.cantidad) || 0), 0);
 
+  // Determinar valor numérico de la tasa de cambio
+  const getTasaValor = () => {
+    if (tasa?.tasa_usd_bs) return Number(tasa.tasa_usd_bs);
+    if (Array.isArray(tasa) && tasa[0]?.tasa_usd_bs) return Number(tasa[0].tasa_usd_bs);
+    if (typeof tasa === 'number' && tasa > 0) return tasa;
+    if (factura.tasa_usd_bs) return Number(factura.tasa_usd_bs);
+    if (factura.total_usd > 0 && factura.total_bs > 0) {
+      return Number(factura.total_bs) / Number(factura.total_usd);
+    }
+    return 0;
+  };
+  const tasaNum = getTasaValor();
+
   return (
     <div className="ticket-overlay">
       <div className="ticket-controls no-print">
         <div className="ticket-controls__options">
-          <span style={{ fontSize: '0.85rem', color: '#aaa' }}>Formato: 58mm (Térmico)</span>
+          <span style={{ fontSize: '0.85rem', color: '#aaa', fontWeight: 'bold' }}>Formato: 80mm (Térmico)</span>
         </div>
         <div className="ticket-controls__actions">
           <button className="btn btn--primary" onClick={handlePrint}>
@@ -164,15 +223,15 @@ export default function TicketFactura({ factura, onClose }) {
         </div>
       </div>
 
-      <div id="ticket-container" className="ticket" style={{ width: config.width }}>
+      <div id="ticket-container" className="ticket" style={{ width: config.width, fontWeight: 'bold' }}>
         {/* Header */}
         <div className="ticket__header">
           <img src={logoUrl} alt="Logo" className="ticket__logo" />
           <div className="ticket__empresa">{empresa.nombre}</div>
-          <div style={{ fontSize: '9px', color: '#555' }}>RIF: {empresa.rif}</div>
-          <div style={{ fontSize: '9px', color: '#555' }}>{empresa.direccion}</div>
+          <div style={{ fontSize: '10.5px', fontWeight: 'bold', color: '#000' }}>RIF: {empresa.rif}</div>
+          <div style={{ fontSize: '10.5px', fontWeight: 'bold', color: '#000' }}>{empresa.direccion}</div>
           {empresa.telefono && (
-            <div style={{ fontSize: '9px', color: '#555' }}>Tlf: {empresa.telefono}</div>
+            <div style={{ fontSize: '10.5px', fontWeight: 'bold', color: '#000' }}>Tlf: {empresa.telefono}</div>
           )}
         </div>
 
@@ -220,16 +279,19 @@ export default function TicketFactura({ factura, onClose }) {
         <table className="ticket__items">
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', width: '50%' }}>Descripción</th>
-              <th style={{ textAlign: 'center', width: '15%' }}>Cant</th>
-              <th style={{ textAlign: 'right', width: '17%' }}>P.Unit</th>
-              <th style={{ textAlign: 'right', width: '18%' }}>Total</th>
+              <th style={{ textAlign: 'left', width: '42%' }}>Descripción</th>
+              <th style={{ textAlign: 'center', width: '12%' }}>Cant</th>
+              <th style={{ textAlign: 'right', width: '18%' }}>P.Unit</th>
+              <th style={{ textAlign: 'right', width: '28%' }}>Total Bs</th>
             </tr>
           </thead>
           <tbody>
             {detalles.map((item, i) => {
-              const precio = item.precio_unitario || item.precio_unitario_usd || 0;
-              const subtotal = item.subtotal || item.subtotal_usd || (item.cantidad * precio);
+              const precio = Number(item.precio_unitario || item.precio_unitario_usd || 0);
+              const subtotalUSD = Number(item.subtotal || item.subtotal_usd || (item.cantidad * precio));
+              const subtotalBs = item.subtotal_bs !== undefined && item.subtotal_bs !== null
+                ? Number(item.subtotal_bs)
+                : (tasaNum > 0 ? (subtotalUSD * tasaNum) : 0);
               return (
                 <tr key={i}>
                   <td style={{ textAlign: 'left' }}>
@@ -237,7 +299,9 @@ export default function TicketFactura({ factura, onClose }) {
                   </td>
                   <td style={{ textAlign: 'center' }}>{item.cantidad}</td>
                   <td style={{ textAlign: 'right' }}>{formatUSD(precio)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatUSD(subtotal)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                    {subtotalBs > 0 ? formatBs(subtotalBs) : formatUSD(subtotalUSD)}
+                  </td>
                 </tr>
               );
             })}
@@ -270,7 +334,7 @@ export default function TicketFactura({ factura, onClose }) {
           </div>
           <div className="ticket__row">
             <span>Tasa BCV:</span>
-            <span>{formatTasa(tasa?.tasa_usd_bs || tasa)}</span>
+            <span>{formatTasa(tasa?.tasa_usd_bs || tasaNum || tasa)}</span>
           </div>
           <div className="ticket__row ticket__row--bold">
             <span>Total Bs:</span>
@@ -290,33 +354,33 @@ export default function TicketFactura({ factura, onClose }) {
                 <span>{formatUSD(mp.monto_usd)}</span>
               </div>
               {mp.monto_bs && (
-                <div className="ticket__ref" style={{ color: '#666' }}>
+                <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
                   Eq. {formatBs(mp.monto_bs)}
                 </div>
               )}
               {mp.metodo_id === 'cashea' && (
                 <>
-                  <div className="ticket__ref" style={{ fontWeight: '600' }}>
+                  <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
                     Método Inicial: {mp.cashea_metodo_inicial_label || mp.cashea_metodo_inicial || 'Punto de Venta'}
                   </div>
                   {mp.cashea_referencia_inicial && (
-                    <div className="ticket__ref">Ref. Inicial: {mp.cashea_referencia_inicial}</div>
+                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Ref. Inicial: {mp.cashea_referencia_inicial}</div>
                   )}
                   {mp.credito_cashea_usd > 0 && (
-                    <div className="ticket__ref" style={{ fontWeight: 'bold' }}>
+                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
                       Crédito Cashea: {formatUSD(mp.credito_cashea_usd)} ({formatBs(mp.credito_cashea_bs)})
                     </div>
                   )}
                 </>
               )}
               {mp.zelle_titular && (
-                <div className="ticket__ref">Emisor: {mp.zelle_titular}</div>
+                <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Emisor: {mp.zelle_titular}</div>
               )}
               {mp.zelle_email && (
-                <div className="ticket__ref">Correo: {mp.zelle_email}</div>
+                <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Correo: {mp.zelle_email}</div>
               )}
               {mp.referencia && (
-                <div className="ticket__ref">
+                <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
                   {mp.metodo_id === 'cashea' ? 'Orden Cashea: ' : 'Ref: '}{mp.referencia}
                 </div>
               )}
@@ -328,8 +392,8 @@ export default function TicketFactura({ factura, onClose }) {
 
         {/* Footer */}
         <div className="ticket__footer">
-          <p style={{ fontWeight: '600', marginBottom: '2px' }}>{empresa.slogan}</p>
-          <p style={{ fontSize: '8px', color: '#666' }}>Documento de entrega / comprobante de venta interno</p>
+          <p style={{ fontWeight: 'bold', marginBottom: '2px' }}>{empresa.slogan}</p>
+          <p style={{ fontSize: '9.5px', color: '#000', fontWeight: 'bold' }}>Documento de entrega / comprobante de venta interno</p>
         </div>
       </div>
     </div>

@@ -345,11 +345,26 @@ export default function POS() {
       };
 
       let factura;
-      const { data: factData, error: factError } = await supabase
+      let { data: factData, error: factError } = await supabase
         .from('facturas')
         .insert(invoicePayload)
         .select()
         .single();
+
+      // Si ocurre colisión de clave única por concurrencia, reintentar regenerando número
+      if (factError && factError.code === '23505' && factError.message?.includes('facturas_numero_factura_key')) {
+        const { data: nuevoNum } = await supabase.rpc('generar_numero_factura');
+        if (nuevoNum) {
+          invoicePayload.numero_factura = nuevoNum;
+          const retryRes = await supabase
+            .from('facturas')
+            .insert(invoicePayload)
+            .select()
+            .single();
+          factData = retryRes.data;
+          factError = retryRes.error;
+        }
+      }
 
       if (factError) {
         // Fallback: if schema strictly requires subtotal_usd or has different column requirements

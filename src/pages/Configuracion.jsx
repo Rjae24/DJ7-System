@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { getEmpresaConfig, saveEmpresaConfig, DEFAULT_EMPRESA } from '../utils/constants';
 import toast from 'react-hot-toast';
 import {
@@ -12,27 +13,108 @@ import {
 } from 'react-icons/hi2';
 
 export default function Configuracion() {
-  const [config, setConfig] = useState(DEFAULT_EMPRESA);
+  const [config, setConfig] = useState(() => getEmpresaConfig());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setConfig(getEmpresaConfig());
+    loadConfig();
   }, []);
+
+  async function loadConfig() {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('configuracion_empresa')
+        .select('*')
+        .eq('id', 'default')
+        .maybeSingle();
+
+      if (data && !error) {
+        const dbConfig = {
+          nombre: data.nombre ?? DEFAULT_EMPRESA.nombre,
+          rif: data.rif ?? DEFAULT_EMPRESA.rif,
+          direccion: data.direccion ?? DEFAULT_EMPRESA.direccion,
+          telefono: data.telefono ?? DEFAULT_EMPRESA.telefono,
+          logo: data.logo || DEFAULT_EMPRESA.logo,
+          slogan: data.slogan ?? DEFAULT_EMPRESA.slogan,
+        };
+        setConfig(dbConfig);
+        saveEmpresaConfig(dbConfig);
+      } else {
+        setConfig(getEmpresaConfig());
+      }
+    } catch (e) {
+      console.error('Error cargando configuración desde Supabase:', e);
+      setConfig(getEmpresaConfig());
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function handleChange(field, value) {
     setConfig(prev => ({ ...prev, [field]: value }));
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    saveEmpresaConfig(config);
-    toast.success('Configuración de empresa guardada con éxito');
+    setSaving(true);
+    try {
+      const payload = {
+        nombre: (config.nombre || '').trim(),
+        rif: (config.rif || '').trim(),
+        direccion: (config.direccion || '').trim(),
+        telefono: (config.telefono || '').trim(),
+        logo: config.logo || DEFAULT_EMPRESA.logo,
+        slogan: (config.slogan || '').trim(),
+      };
+
+      // Guardar en localStorage inmediatamente
+      saveEmpresaConfig(payload);
+      setConfig(payload);
+
+      // Guardar en Supabase para persistencia global
+      const { error } = await supabase
+        .from('configuracion_empresa')
+        .upsert({
+          id: 'default',
+          ...payload,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+
+      toast.success('Configuración de empresa guardada con éxito');
+    } catch (error) {
+      console.error('Error guardando configuración:', error);
+      toast.error('Error al guardar configuración: ' + (error.message || 'Error de conexión'));
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleReset() {
-    if (confirm('¿Restablecer datos predeterminados?')) {
-      setConfig(DEFAULT_EMPRESA);
+  async function handleReset() {
+    if (!confirm('¿Restablecer datos predeterminados?')) return;
+    setSaving(true);
+    try {
       saveEmpresaConfig(DEFAULT_EMPRESA);
+      setConfig(DEFAULT_EMPRESA);
+
+      const { error } = await supabase
+        .from('configuracion_empresa')
+        .upsert({
+          id: 'default',
+          ...DEFAULT_EMPRESA,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
       toast.success('Valores por defecto restablecidos');
+    } catch (error) {
+      console.error('Error restableciendo configuración:', error);
+      toast.error('Error al restablecer: ' + error.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -74,7 +156,7 @@ export default function Configuracion() {
                 </label>
                 <input
                   type="text"
-                  value={config.nombre}
+                  value={config.nombre || ''}
                   onChange={e => handleChange('nombre', e.target.value)}
                   placeholder="Ej. COMERCIALIZADORA DJ7 C.A."
                   required
@@ -87,7 +169,7 @@ export default function Configuracion() {
                 </label>
                 <input
                   type="text"
-                  value={config.rif}
+                  value={config.rif || ''}
                   onChange={e => handleChange('rif', e.target.value)}
                   placeholder="Ej. J-50123456-7"
                   required
@@ -102,7 +184,7 @@ export default function Configuracion() {
                 </label>
                 <input
                   type="text"
-                  value={config.direccion}
+                  value={config.direccion || ''}
                   onChange={e => handleChange('direccion', e.target.value)}
                   placeholder="Ej. Caracas, Venezuela"
                   required
@@ -115,7 +197,7 @@ export default function Configuracion() {
                 </label>
                 <input
                   type="text"
-                  value={config.telefono}
+                  value={config.telefono || ''}
                   onChange={e => handleChange('telefono', e.target.value)}
                   placeholder="Ej. 0414-1234567"
                 />
@@ -129,7 +211,7 @@ export default function Configuracion() {
                 </label>
                 <input
                   type="text"
-                  value={config.slogan}
+                  value={config.slogan || ''}
                   onChange={e => handleChange('slogan', e.target.value)}
                   placeholder="Ej. ¡Gracias por su compra!"
                 />
@@ -162,14 +244,16 @@ export default function Configuracion() {
                 type="button"
                 className="btn btn--ghost"
                 onClick={handleReset}
+                disabled={saving}
               >
                 <HiOutlineArrowPath /> Restablecer
               </button>
               <button
                 type="submit"
                 className="btn btn--primary"
+                disabled={saving}
               >
-                <HiOutlineCheck /> Guardar Configuración
+                <HiOutlineCheck /> {saving ? 'Guardando...' : 'Guardar Configuración'}
               </button>
             </div>
           </form>
