@@ -56,9 +56,10 @@ export default function TicketFactura({ factura, onClose }) {
             }
             .ticket__logo {
               display: block;
-              margin: 0 auto 5px auto;
-              max-width: 65px;
-              width: 45%;
+              margin: 0 auto 4px auto;
+              max-width: 48px;
+              max-height: 48px;
+              width: auto;
               height: auto;
               object-fit: contain;
             }
