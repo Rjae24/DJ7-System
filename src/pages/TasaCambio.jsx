@@ -60,7 +60,7 @@ export default function TasaCambio() {
         throw new Error('Tasa BCV inválida recibida');
       }
 
-      const valorTasa = parseFloat(data.tasa_usd.toFixed(4));
+      const valorTasa = parseFloat(data.tasa_usd.toFixed(2));
       const hoy = new Date().toISOString().split('T')[0];
 
       // Insert or update for today
@@ -79,7 +79,7 @@ export default function TasaCambio() {
           })
           .eq('id', existingRate.id);
         if (updErr) throw updErr;
-        toast.success(`Tasa del día actualizada a Bs ${valorTasa.toFixed(4)} (BCV)`);
+        toast.success(`Tasa del día actualizada a Bs ${valorTasa.toFixed(2)} (BCV)`);
       } else {
         const { error: insErr } = await supabase
           .from('tasas_cambio')
@@ -89,7 +89,7 @@ export default function TasaCambio() {
             registrado_por: profile.id,
           });
         if (insErr) throw insErr;
-        toast.success(`Tasa BCV sincronizada y registrada: Bs ${valorTasa.toFixed(4)}`);
+        toast.success(`Tasa BCV sincronizada y registrada: Bs ${valorTasa.toFixed(2)}`);
       }
 
       await loadTasas();
@@ -106,7 +106,7 @@ export default function TasaCambio() {
       toast.error('Ingrese una tasa válida');
       return;
     }
-    const valor = parseFloat(parseFloat(nuevaTasa).toFixed(4));
+    const valor = parseFloat(parseFloat(nuevaTasa).toFixed(2));
     const hoy = new Date().toISOString().split('T')[0];
 
     try {
@@ -318,11 +318,11 @@ export default function TasaCambio() {
                 <label>Tasa USD → Bs</label>
                 <input
                   type="number"
-                  step="0.0001"
+                  step="0.01"
                   min="0"
                   value={nuevaTasa}
                   onChange={e => setNuevaTasa(e.target.value)}
-                  placeholder="Ej: 499.8608"
+                  placeholder="Ej: 520.50"
                   autoFocus
                   required
                 />

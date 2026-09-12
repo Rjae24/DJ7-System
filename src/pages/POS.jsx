@@ -66,7 +66,7 @@ export default function POS() {
       toast.loading('Consultando API BCV...', { id: 'bcv-sync' });
       const bcv = await fetchTasaBCV();
       if (!bcv.tasa_usd) throw new Error('No se obtuvo tasa');
-      const valor = parseFloat(bcv.tasa_usd.toFixed(4));
+      const valor = parseFloat(bcv.tasa_usd.toFixed(2));
       const hoy = new Date().toISOString().split('T')[0];
 
       const { data: existing } = await supabase
@@ -86,7 +86,7 @@ export default function POS() {
           .insert({ tasa_usd_bs: valor, fecha_registro: hoy, registrado_por: profile?.id });
       }
       await loadTasaHoy();
-      toast.success(`Tasa BCV actualizada: Bs ${valor.toFixed(4)}`, { id: 'bcv-sync' });
+      toast.success(`Tasa BCV actualizada: Bs ${valor.toFixed(2)}`, { id: 'bcv-sync' });
     } catch (e) {
       toast.error(`Error al sincronizar BCV: ${e.message}`, { id: 'bcv-sync' });
     }

@@ -51,7 +51,7 @@ export function formatFechaCorta(fecha) {
 export function formatTasa(tasa) {
   return `Bs ${new Intl.NumberFormat('es-VE', {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
+    maximumFractionDigits: 2,
   }).format(tasa || 0)}/$`;
 }
 

@@ -13,9 +13,11 @@ export async function fetchTasaBCV() {
       throw new Error(`Error en la API BCV: ${res.status} ${res.statusText}`);
     }
     const data = await res.json();
+    const rawUsd = data.tasas?.usd || data.tasa_bcv || 0;
+    const rawEur = data.tasas?.eur || 0;
     return {
-      tasa_usd: data.tasas?.usd || data.tasa_bcv || 0,
-      tasa_eur: data.tasas?.eur || 0,
+      tasa_usd: rawUsd ? parseFloat(Number(rawUsd).toFixed(2)) : 0,
+      tasa_eur: rawEur ? parseFloat(Number(rawEur).toFixed(2)) : 0,
       updated_at: data.updated_at,
       ipc: data.ipc || null,
       raw: data,
