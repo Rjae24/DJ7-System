@@ -1452,9 +1452,8 @@ a:hover { color: var(--primary-hover); }
 
 .ticket__logo {
   display: block;
-  margin: 0 auto 4px auto;
-  max-width: 48px;
-  max-height: 48px;
+  margin: 0 auto 5px auto;
+  max-width: 54px;
   width: auto;
   height: auto;
   object-fit: contain;

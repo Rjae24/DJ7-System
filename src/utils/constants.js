@@ -50,7 +50,7 @@ export const DEFAULT_EMPRESA = {
   rif: 'J-50123456-7',
   direccion: 'Caracas, Venezuela',
   telefono: '0414-1234567',
-  logo: '/logo-vectorizado.jfif',
+  logo: '/logo-dj7-solo.png',
   slogan: '¡Gracias por su compra!',
 };
 

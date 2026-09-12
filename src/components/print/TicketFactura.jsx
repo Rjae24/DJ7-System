@@ -6,7 +6,7 @@ import { HiOutlinePrinter, HiOutlineXMark } from 'react-icons/hi2';
 export default function TicketFactura({ factura, onClose }) {
   const config = PRINT_WIDTHS['58mm'];
   const empresa = getEmpresaConfig();
-  const logoUrl = '/logo-vectorizado.jfif';
+  const logoUrl = '/logo-dj7-solo.png';
 
   function handlePrint() {
     const ticketElem = document.getElementById('ticket-container');
@@ -56,9 +56,8 @@ export default function TicketFactura({ factura, onClose }) {
             }
             .ticket__logo {
               display: block;
-              margin: 0 auto 4px auto;
-              max-width: 48px;
-              max-height: 48px;
+              margin: 0 auto 5px auto;
+              max-width: 54px;
               width: auto;
               height: auto;
               object-fit: contain;
