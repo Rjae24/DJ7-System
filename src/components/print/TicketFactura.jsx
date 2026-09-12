@@ -56,9 +56,9 @@ export default function TicketFactura({ factura, onClose }) {
             }
             .ticket__logo {
               display: block;
-              margin: 0 auto 6px auto;
-              max-width: 140px;
-              width: 75%;
+              margin: 0 auto 5px auto;
+              max-width: 65px;
+              width: 45%;
               height: auto;
               object-fit: contain;
             }
@@ -87,15 +87,20 @@ export default function TicketFactura({ factura, onClose }) {
               border-collapse: collapse;
             }
             .ticket__items th {
-              font-size: 10px;
+              font-size: 9px;
               border-bottom: 1px solid #000;
               padding: 2px 0;
               text-transform: uppercase;
             }
             .ticket__items td {
               padding: 2px 0;
-              font-size: 10px;
+              font-size: 9.5px;
               vertical-align: top;
+            }
+            .ticket__item-sub {
+              font-size: 8.5px;
+              color: #444;
+              margin-top: 1px;
             }
             .ticket__totals {
               margin: 4px 0;
@@ -139,6 +144,9 @@ export default function TicketFactura({ factura, onClose }) {
   const vendedor = factura.vendedor || factura.usuarios;
   const tasa = factura.tasa || factura.tasas_cambio;
   const metodosPago = factura.metodos_pago_detalle || factura.metodos_pago || [];
+
+  // Cantidad total de unidades/productos vendidos
+  const totalCantidad = detalles.reduce((sum, item) => sum + (parseFloat(item.cantidad) || 0), 0);
 
   return (
     <div className="ticket-overlay">
@@ -184,6 +192,12 @@ export default function TicketFactura({ factura, onClose }) {
             <span>Vendedor:</span>
             <span>{vendedor?.nombre_completo || 'Vendedor DJ7'}</span>
           </div>
+        </div>
+
+        <div className="ticket__divider" />
+
+        {/* Client Info */}
+        <div className="ticket__info">
           <div className="ticket__row">
             <span>Cliente:</span>
             <span>{cliente?.nombre || 'Consumidor Final'}</span>
@@ -206,9 +220,10 @@ export default function TicketFactura({ factura, onClose }) {
         <table className="ticket__items">
           <thead>
             <tr>
-              <th style={{ textAlign: 'left' }}>Item</th>
-              <th style={{ textAlign: 'center' }}>Cant</th>
-              <th style={{ textAlign: 'right' }}>Total</th>
+              <th style={{ textAlign: 'left', width: '50%' }}>Descripción</th>
+              <th style={{ textAlign: 'center', width: '15%' }}>Cant</th>
+              <th style={{ textAlign: 'right', width: '17%' }}>P.Unit</th>
+              <th style={{ textAlign: 'right', width: '18%' }}>Total</th>
             </tr>
           </thead>
           <tbody>
@@ -217,9 +232,12 @@ export default function TicketFactura({ factura, onClose }) {
               const subtotal = item.subtotal || item.subtotal_usd || (item.cantidad * precio);
               return (
                 <tr key={i}>
-                  <td>{item.producto_nombre || item.nombre}</td>
+                  <td style={{ textAlign: 'left' }}>
+                    {item.producto_nombre || item.nombre}
+                  </td>
                   <td style={{ textAlign: 'center' }}>{item.cantidad}</td>
-                  <td style={{ textAlign: 'right' }}>{formatUSD(subtotal)}</td>
+                  <td style={{ textAlign: 'right' }}>{formatUSD(precio)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatUSD(subtotal)}</td>
                 </tr>
               );
             })}
@@ -231,6 +249,10 @@ export default function TicketFactura({ factura, onClose }) {
         {/* Totals */}
         <div className="ticket__totals">
           <div className="ticket__row">
+            <span>Cant. Artículos:</span>
+            <span><strong>{totalCantidad} und.</strong></span>
+          </div>
+          <div className="ticket__row">
             <span>Subtotal:</span>
             <span>{formatUSD(factura.subtotal_usd || factura.total_usd)}</span>
           </div>
@@ -241,7 +263,7 @@ export default function TicketFactura({ factura, onClose }) {
             </div>
           )}
           <div className="ticket__row ticket__row--bold">
-            <span>Total USD:</span>
+            <span>Total General USD:</span>
             <span>{formatUSD(factura.total_usd)}</span>
           </div>
           <div className="ticket__row">
