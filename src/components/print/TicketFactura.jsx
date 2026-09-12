@@ -3,10 +3,10 @@ import { getEmpresaConfig, PRINT_WIDTHS } from '../../utils/constants';
 import { formatUSD, formatBs, formatFecha, formatTasa } from '../../utils/formatters';
 import { HiOutlinePrinter, HiOutlineXMark } from 'react-icons/hi2';
 
-export default function TicketFactura({ factura, onClose, initialWidth = '80mm' }) {
-  const [selectedWidth, setSelectedWidth] = useState(initialWidth);
-  const config = PRINT_WIDTHS[selectedWidth] || PRINT_WIDTHS['80mm'];
+export default function TicketFactura({ factura, onClose }) {
+  const config = PRINT_WIDTHS['58mm'];
   const empresa = getEmpresaConfig();
+  const logoUrl = '/logo-vectorizado.jfif';
 
   function handlePrint() {
     const ticketElem = document.getElementById('ticket-container');
@@ -39,7 +39,7 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
             }
             body {
               margin: 0;
-              padding: 4mm 2mm;
+              padding: 3mm 2mm;
               font-family: 'Courier New', Courier, monospace;
               font-size: 11px;
               line-height: 1.35;
@@ -55,11 +55,12 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
               margin-bottom: 6px;
             }
             .ticket__logo {
-              width: 45px;
-              height: 45px;
-              border-radius: 4px;
-              object-fit: cover;
-              margin-bottom: 4px;
+              display: block;
+              margin: 0 auto 6px auto;
+              max-width: 140px;
+              width: 75%;
+              height: auto;
+              object-fit: contain;
             }
             .ticket__empresa {
               font-weight: bold;
@@ -143,19 +144,7 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
     <div className="ticket-overlay">
       <div className="ticket-controls no-print">
         <div className="ticket-controls__options">
-          <label style={{ marginRight: '6px' }}>Formato:</label>
-          <button
-            className={`btn btn--xs ${selectedWidth === '80mm' ? 'btn--primary' : 'btn--ghost'}`}
-            onClick={() => setSelectedWidth('80mm')}
-          >
-            80mm
-          </button>
-          <button
-            className={`btn btn--xs ${selectedWidth === '58mm' ? 'btn--primary' : 'btn--ghost'}`}
-            onClick={() => setSelectedWidth('58mm')}
-          >
-            58mm
-          </button>
+          <span style={{ fontSize: '0.85rem', color: '#aaa' }}>Formato: 58mm (Térmico)</span>
         </div>
         <div className="ticket-controls__actions">
           <button className="btn btn--primary" onClick={handlePrint}>
@@ -170,7 +159,7 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
       <div id="ticket-container" className="ticket" style={{ width: config.width }}>
         {/* Header */}
         <div className="ticket__header">
-          {empresa.logo && <img src={empresa.logo} alt="Logo" className="ticket__logo" />}
+          <img src={logoUrl} alt="Logo" className="ticket__logo" />
           <div className="ticket__empresa">{empresa.nombre}</div>
           <div style={{ fontSize: '9px', color: '#555' }}>RIF: {empresa.rif}</div>
           <div style={{ fontSize: '9px', color: '#555' }}>{empresa.direccion}</div>
@@ -281,8 +270,21 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
                   Eq. {formatBs(mp.monto_bs)}
                 </div>
               )}
+              {mp.metodo_id === 'cashea' && mp.credito_cashea_usd > 0 && (
+                <div className="ticket__ref" style={{ fontWeight: 'bold' }}>
+                  Crédito Cashea: {formatUSD(mp.credito_cashea_usd)} (Bs {formatBs(mp.credito_cashea_bs)})
+                </div>
+              )}
+              {mp.zelle_titular && (
+                <div className="ticket__ref">Emisor: {mp.zelle_titular}</div>
+              )}
+              {mp.zelle_email && (
+                <div className="ticket__ref">Correo: {mp.zelle_email}</div>
+              )}
               {mp.referencia && (
-                <div className="ticket__ref">Ref: {mp.referencia}</div>
+                <div className="ticket__ref">
+                  {mp.metodo_id === 'cashea' ? 'Orden Cashea: ' : 'Ref: '}{mp.referencia}
+                </div>
               )}
             </div>
           ))}

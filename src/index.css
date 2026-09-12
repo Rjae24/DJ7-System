@@ -286,14 +286,6 @@ a:hover { color: var(--primary-hover); }
   width: var(--sidebar-collapsed);
 }
 
-.sidebar__toggle--mobile {
-  display: none;
-}
-
-.sidebar__toggle--desktop {
-  display: flex;
-}
-
 .sidebar__header {
   display: flex;
   align-items: center;
@@ -1234,12 +1226,38 @@ a:hover { color: var(--primary-hover); }
 .pos-payment-method {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.75rem;
+  gap: 0.5rem;
+  padding: 0.85rem;
   background: var(--bg-elevated);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
   position: relative;
+}
+
+.pos-payment-method__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pos-payment-method__header select {
+  flex: 1;
+}
+
+.pos-payment-method__amounts {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pos-payment-method__zelle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: #181818;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border-left: 3px solid #6b21a8;
 }
 
 .pos-payment-method select,
@@ -1264,12 +1282,6 @@ a:hover { color: var(--primary-hover); }
 .pos-payment-method__bs {
   font-size: 0.8rem;
   color: var(--text-muted);
-}
-
-.pos-payment-method > .btn {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
 }
 
 .pos-payment-summary {
@@ -1439,10 +1451,12 @@ a:hover { color: var(--primary-hover); }
 }
 
 .ticket__logo {
-  width: 50px;
-  height: 50px;
-  border-radius: 4px;
-  margin-bottom: 4px;
+  display: block;
+  margin: 0 auto 6px auto;
+  max-width: 140px;
+  width: 75%;
+  height: auto;
+  object-fit: contain;
 }
 
 .ticket__empresa {
@@ -1628,14 +1642,6 @@ a:hover { color: var(--primary-hover); }
   .sidebar.sidebar--mobile-open {
     transform: translateX(0);
     box-shadow: 4px 0 24px rgba(0,0,0,0.6);
-  }
-
-  .sidebar__toggle--mobile {
-    display: flex;
-  }
-
-  .sidebar__toggle--desktop {
-    display: none;
   }
   
   .sidebar-overlay {

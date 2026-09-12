@@ -1,11 +1,12 @@
 // Métodos de pago disponibles en el sistema
 export const METODOS_PAGO = [
-  { id: 'efectivo_usd', label: 'Efectivo USD', requiereReferencia: false, enBs: false },
-  { id: 'efectivo_bs', label: 'Efectivo Bs', requiereReferencia: false, enBs: true },
-  { id: 'zelle', label: 'Zelle', requiereReferencia: true, enBs: false },
-  { id: 'pago_movil', label: 'Pago Móvil', requiereReferencia: true, enBs: true },
-  { id: 'punto_venta', label: 'Punto de Venta', requiereReferencia: true, enBs: true },
-  { id: 'transferencia', label: 'Transferencia', requiereReferencia: true, enBs: true },
+  { id: 'efectivo_usd', label: 'Efectivo USD', enBs: false },
+  { id: 'efectivo_bs', label: 'Efectivo Bs', enBs: true },
+  { id: 'zelle', label: 'Zelle', enBs: false, isZelle: true },
+  { id: 'pago_movil', label: 'Pago Móvil', enBs: true, requiereReferencia: true },
+  { id: 'punto_venta', label: 'Punto de Venta', enBs: true, requiereReferencia: true },
+  { id: 'transferencia', label: 'Transferencia', enBs: true, requiereReferencia: true },
+  { id: 'cashea', label: 'Cashea', enBs: true, isCashea: true, requiereReferencia: true },
 ];
 
 // Roles del sistema
@@ -39,9 +40,8 @@ export const DEFAULT_EMPRESA = {
   rif: 'J-50123456-7',
   direccion: 'Caracas, Venezuela',
   telefono: '0414-1234567',
-  logo: '/logo-dj7.jpg',
+  logo: '/logo-vectorizado.jfif',
   slogan: '¡Gracias por su compra!',
-  iva_porcentaje: 16, // IVA estándar en Venezuela
 };
 
 export function getEmpresaConfig() {

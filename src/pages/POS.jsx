@@ -195,23 +195,66 @@ export default function POS() {
   const totalBs = tasaHoy ? totalUSD * parseFloat(tasaHoy.tasa_usd_bs) : 0;
 
 
-  // Payment methods management
-  function agregarMetodoPago() {
-    setMetodosPago([...metodosPago, { metodo: '', monto_usd: 0, monto_bs: 0, referencia: '' }]);
+  function agregarMetodoPago(metodoId = '') {
+    const defaultMontoUSD = Math.max(0, parseFloat((restante || 0).toFixed(2)));
+    const metodoConfig = METODOS_PAGO.find(m => m.id === metodoId);
+    const tasa = tasaHoy ? parseFloat(tasaHoy.tasa_usd_bs) : 0;
+    const montoBs = (metodoConfig?.enBs && tasa > 0) ? parseFloat((defaultMontoUSD * tasa).toFixed(2)) : 0;
+
+    setMetodosPago([
+      ...metodosPago,
+      {
+        metodo: metodoId,
+        monto_usd: defaultMontoUSD,
+        monto_bs: montoBs,
+        referencia: '',
+        zelle_email: '',
+        zelle_titular: '',
+        cashea_inicial_usd: defaultMontoUSD,
+        cashea_inicial_bs: montoBs,
+      }
+    ]);
   }
 
   function actualizarMetodoPago(index, field, value) {
     const updated = [...metodosPago];
-    updated[index] = { ...updated[index], [field]: value };
-    
-    // Auto-calculate BS if it's a BS payment method
-    if (field === 'monto_usd' && tasaHoy) {
-      const metodoConfig = METODOS_PAGO.find(m => m.id === updated[index].metodo);
-      if (metodoConfig?.enBs) {
-        updated[index].monto_bs = parseFloat(value || 0) * parseFloat(tasaHoy.tasa_usd_bs);
+    const item = { ...updated[index] };
+    const tasa = tasaHoy ? parseFloat(tasaHoy.tasa_usd_bs) : 0;
+
+    if (field === 'metodo') {
+      item.metodo = value;
+      const metodoConfig = METODOS_PAGO.find(m => m.id === value);
+      // Auto-assign remaining USD if current amount is 0
+      if (!item.monto_usd || item.monto_usd === 0) {
+        const otherPayments = updated
+          .filter((_, i) => i !== index)
+          .reduce((sum, mp) => sum + parseFloat(mp.monto_usd || 0), 0);
+        const pend = Math.max(0, parseFloat((totalUSD - otherPayments).toFixed(2)));
+        item.monto_usd = pend;
       }
+      if (metodoConfig?.enBs && tasa > 0) {
+        item.monto_bs = parseFloat((item.monto_usd * tasa).toFixed(2));
+      } else {
+        item.monto_bs = 0;
+      }
+    } else if (field === 'monto_usd') {
+      const numVal = parseFloat(value) || 0;
+      item.monto_usd = value === '' ? '' : numVal;
+      const metodoConfig = METODOS_PAGO.find(m => m.id === item.metodo);
+      if (metodoConfig?.enBs && tasa > 0) {
+        item.monto_bs = parseFloat((numVal * tasa).toFixed(2));
+      }
+    } else if (field === 'monto_bs') {
+      const numBs = parseFloat(value) || 0;
+      item.monto_bs = value === '' ? '' : numBs;
+      if (tasa > 0) {
+        item.monto_usd = parseFloat((numBs / tasa).toFixed(2));
+      }
+    } else {
+      item[field] = value;
     }
-    
+
+    updated[index] = item;
     setMetodosPago(updated);
   }
 
@@ -219,8 +262,13 @@ export default function POS() {
     setMetodosPago(metodosPago.filter((_, i) => i !== index));
   }
 
+  // Si hay Cashea, calculamos el total cubierto considerando la inicial pagada en tienda + el crédito asumido por Cashea
+  const tieneCashea = metodosPago.some(mp => mp.metodo === 'cashea');
   const totalPagado = metodosPago.reduce((sum, mp) => sum + parseFloat(mp.monto_usd || 0), 0);
-  const restante = totalUSD - totalPagado;
+  // Si usa Cashea, la inicial es lo que paga el cliente hoy, y el crédito Cashea cubre el resto de la factura
+  const casheaItem = metodosPago.find(mp => mp.metodo === 'cashea');
+  const casheaCreditoUSD = (tieneCashea && casheaItem) ? Math.max(0, parseFloat((totalUSD - totalPagado).toFixed(2))) : 0;
+  const restante = tieneCashea ? 0 : Math.max(0, parseFloat((totalUSD - totalPagado).toFixed(2)));
 
   // Emit invoice
   async function emitirFactura() {
@@ -229,6 +277,20 @@ export default function POS() {
     if (!tasaHoy) { toast.error('No hay tasa de cambio registrada'); return; }
     if (restante > 0.01) { toast.error(`Faltan ${formatUSD(restante)} por pagar`); return; }
 
+    // Validate payment methods requirements
+    for (const mp of metodosPago) {
+      if (!mp.metodo) { toast.error('Seleccione el método de pago'); return; }
+      if (mp.metodo === 'zelle') {
+        if (!mp.zelle_titular?.trim()) { toast.error('Ingrese el nombre del titular/emisor de Zelle'); return; }
+        if (!mp.zelle_email?.trim()) { toast.error('Ingrese el correo del emisor de Zelle'); return; }
+      } else if (mp.metodo === 'cashea') {
+        if (!mp.referencia?.trim()) { toast.error('Ingrese el N° de orden / comprobante Cashea'); return; }
+        if (parseFloat(mp.monto_usd || 0) <= 0) { toast.error('Ingrese el monto de la inicial pagada en Cashea'); return; }
+      } else if (METODOS_PAGO.find(m => m.id === mp.metodo)?.requiereReferencia) {
+        if (!mp.referencia?.trim()) { toast.error(`Ingrese el número de referencia para ${METODOS_PAGO.find(m => m.id === mp.metodo)?.label}`); return; }
+      }
+    }
+
     setLoading(true);
     try {
       // Generate invoice number
@@ -236,30 +298,71 @@ export default function POS() {
       if (numError) throw numError;
 
       // Prepare payment methods for storage
-      const metodosStorage = metodosPago.map(mp => ({
-        metodo: METODOS_PAGO.find(m => m.id === mp.metodo)?.label || mp.metodo,
-        monto_usd: parseFloat(mp.monto_usd || 0),
-        ...(mp.monto_bs > 0 && { monto_bs: parseFloat(mp.monto_bs) }),
-        ...(mp.referencia && { referencia: mp.referencia }),
-      }));
+      const tasa = parseFloat(tasaHoy.tasa_usd_bs);
+      const metodosStorage = metodosPago.map(mp => {
+        if (mp.metodo === 'cashea') {
+          const inicialUSD = parseFloat(mp.monto_usd || 0);
+          const inicialBs = parseFloat((inicialUSD * tasa).toFixed(2));
+          const creditoUSD = parseFloat((totalUSD - totalPagado).toFixed(2));
+          const creditoBs = parseFloat((creditoUSD * tasa).toFixed(2));
+          return {
+            metodo: 'Cashea',
+            metodo_id: 'cashea',
+            monto_usd: inicialUSD,
+            monto_bs: inicialBs,
+            inicial_usd: inicialUSD,
+            inicial_bs: inicialBs,
+            credito_cashea_usd: creditoUSD,
+            credito_cashea_bs: creditoBs,
+            referencia: mp.referencia || '',
+          };
+        }
+        return {
+          metodo: METODOS_PAGO.find(m => m.id === mp.metodo)?.label || mp.metodo,
+          metodo_id: mp.metodo,
+          monto_usd: parseFloat(mp.monto_usd || 0),
+          ...(mp.monto_bs > 0 && { monto_bs: parseFloat(mp.monto_bs) }),
+          ...(mp.referencia && { referencia: mp.referencia }),
+          ...(mp.zelle_titular && { zelle_titular: mp.zelle_titular }),
+          ...(mp.zelle_email && { zelle_email: mp.zelle_email }),
+        };
+      });
 
-      // Insert invoice
-      const { data: factura, error: factError } = await supabase
+      // Insert invoice without subtotal_usd if it's a generated/default column
+      const invoicePayload = {
+        numero_factura: numData,
+        cliente_id: clienteSeleccionado.id,
+        vendedor_id: profile.id,
+        tasa_id: tasaHoy.id,
+        descuento_usd: 0,
+        total_usd: totalUSD,
+        total_bs: totalBs,
+        metodos_pago: metodosStorage,
+      };
+
+      // Try inserting with subtotal_usd; if schema complains it's a generated column, retry without it
+      let factura;
+      const { data: factData, error: factError } = await supabase
         .from('facturas')
-        .insert({
-          numero_factura: numData,
-          cliente_id: clienteSeleccionado.id,
-          vendedor_id: profile.id,
-          tasa_id: tasaHoy.id,
-          subtotal_usd: subtotalUSD,
-          descuento_usd: 0,
-          total_usd: totalUSD,
-          total_bs: totalBs,
-          metodos_pago: metodosStorage,
-        })
+        .insert({ ...invoicePayload, subtotal_usd: subtotalUSD })
         .select()
         .single();
-      if (factError) throw factError;
+
+      if (factError) {
+        if (factError.message?.includes('subtotal_usd') || factError.code === '428C9') {
+          const { data: retryData, error: retryError } = await supabase
+            .from('facturas')
+            .insert(invoicePayload)
+            .select()
+            .single();
+          if (retryError) throw retryError;
+          factura = retryData;
+        } else {
+          throw factError;
+        }
+      } else {
+        factura = factData;
+      }
 
       // Insert invoice details
       const detalles = carrito.map(item => ({
@@ -535,44 +638,125 @@ export default function POS() {
               <div className="pos-payment">
                 <h4>Métodos de Pago</h4>
                 
-                {metodosPago.map((mp, index) => (
-                  <div key={index} className="pos-payment-method">
-                    <select
-                      value={mp.metodo}
-                      onChange={(e) => actualizarMetodoPago(index, 'metodo', e.target.value)}
-                    >
-                      <option value="">Seleccionar...</option>
-                      {METODOS_PAGO.map(m => (
-                        <option key={m.id} value={m.id}>{m.label}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="Monto USD"
-                      value={mp.monto_usd || ''}
-                      onChange={(e) => actualizarMetodoPago(index, 'monto_usd', e.target.value)}
-                    />
-                    {METODOS_PAGO.find(m => m.id === mp.metodo)?.requiereReferencia && (
-                      <input
-                        type="text"
-                        placeholder="Referencia"
-                        value={mp.referencia || ''}
-                        onChange={(e) => actualizarMetodoPago(index, 'referencia', e.target.value)}
-                      />
-                    )}
-                    {METODOS_PAGO.find(m => m.id === mp.metodo)?.enBs && mp.monto_bs > 0 && (
-                      <span className="pos-payment-method__bs">{formatBs(mp.monto_bs)}</span>
-                    )}
-                    <button className="btn btn--ghost btn--xs text-danger" onClick={() => quitarMetodoPago(index)}>
-                      <HiOutlineTrash />
-                    </button>
-                  </div>
-                ))}
+                {metodosPago.map((mp, index) => {
+                  const metodoConfig = METODOS_PAGO.find(m => m.id === mp.metodo);
+                  return (
+                    <div key={index} className="pos-payment-method">
+                      <div className="pos-payment-method__header">
+                        <select
+                          value={mp.metodo}
+                          onChange={(e) => actualizarMetodoPago(index, 'metodo', e.target.value)}
+                        >
+                          <option value="">Seleccionar método...</option>
+                          {METODOS_PAGO.map(m => (
+                            <option key={m.id} value={m.id}>{m.label}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--xs text-danger"
+                          onClick={() => quitarMetodoPago(index)}
+                          title="Eliminar método"
+                        >
+                          <HiOutlineTrash />
+                        </button>
+                      </div>
 
-                <button className="btn btn--ghost btn--sm" onClick={agregarMetodoPago}>
-                  <HiOutlinePlus /> Agregar método
+                      {mp.metodo && (
+                        <>
+                          <div className="pos-payment-method__amounts">
+                            <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem' }}>Monto ($ USD)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                                value={mp.monto_usd ?? ''}
+                                onChange={(e) => actualizarMetodoPago(index, 'monto_usd', e.target.value)}
+                              />
+                            </div>
+
+                            {metodoConfig?.enBs && (
+                              <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                                <label style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>Monto (Bs)</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={mp.monto_bs ?? ''}
+                                  onChange={(e) => actualizarMetodoPago(index, 'monto_bs', e.target.value)}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Zelle details: Correo y Nombre del emisor */}
+                          {metodoConfig?.isZelle && (
+                            <div className="pos-payment-method__zelle">
+                              <div className="form-group" style={{ marginBottom: '0.35rem' }}>
+                                <input
+                                  type="text"
+                                  placeholder="Nombre / Titular del Emisor Zelle"
+                                  value={mp.zelle_titular || ''}
+                                  onChange={(e) => actualizarMetodoPago(index, 'zelle_titular', e.target.value)}
+                                  required
+                                />
+                              </div>
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <input
+                                  type="email"
+                                  placeholder="Correo del Emisor Zelle"
+                                  value={mp.zelle_email || ''}
+                                  onChange={(e) => actualizarMetodoPago(index, 'zelle_email', e.target.value)}
+                                  required
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Cashea details: Notificación de crédito y comprobante */}
+                          {metodoConfig?.isCashea && (
+                            <div style={{
+                              background: 'rgba(234, 179, 8, 0.1)',
+                              border: '1px solid rgba(234, 179, 8, 0.3)',
+                              borderRadius: '6px',
+                              padding: '0.5rem 0.65rem',
+                              marginTop: '0.35rem',
+                              fontSize: '0.78rem',
+                              color: '#FACC15'
+                            }}>
+                              <span>El cliente paga esta inicial en tienda. El resto queda a crédito Cashea.</span>
+                            </div>
+                          )}
+
+                          {/* Referencia para Pago Móvil, Punto de Venta, Transferencia o Cashea */}
+                          {metodoConfig?.requiereReferencia && (
+                            <div className="form-group" style={{ marginTop: '0.35rem', marginBottom: 0 }}>
+                              <input
+                                type="text"
+                                placeholder={
+                                  mp.metodo === 'pago_movil'
+                                    ? 'N° de Referencia Pago Móvil (ej. 4 últimos dígitos)'
+                                    : mp.metodo === 'cashea'
+                                    ? 'N° de Orden / Comprobante Cashea'
+                                    : 'N° de Referencia / Comprobante'
+                                }
+                                value={mp.referencia || ''}
+                                onChange={(e) => actualizarMetodoPago(index, 'referencia', e.target.value)}
+                                required
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <button className="btn btn--ghost btn--sm" onClick={() => agregarMetodoPago()}>
+                  <HiOutlinePlus /> Agregar otro método (Pago Mixto)
                 </button>
 
                 <div className="pos-payment-summary">

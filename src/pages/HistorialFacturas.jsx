@@ -208,12 +208,21 @@ export default function HistorialFacturas() {
               </div>
 
               <h4 style={{ marginTop: '1rem' }}>Métodos de Pago</h4>
-              {(showDetalle.metodos_pago || []).map((mp, i) => (
-                <div key={i} className="pos-totals__row">
-                  <span>{mp.metodo}{mp.referencia ? ` (Ref: ${mp.referencia})` : ''}</span>
-                  <span>{formatUSD(mp.monto_usd)}</span>
-                </div>
-              ))}
+              {(showDetalle.metodos_pago || []).map((mp, i) => {
+                const extraInfo = [];
+                if (mp.zelle_titular) extraInfo.push(`Emisor: ${mp.zelle_titular}`);
+                if (mp.zelle_email) extraInfo.push(`Correo: ${mp.zelle_email}`);
+                if (mp.referencia) extraInfo.push(mp.metodo_id === 'cashea' ? `Orden: ${mp.referencia}` : `Ref: ${mp.referencia}`);
+                if (mp.metodo_id === 'cashea' && mp.credito_cashea_usd > 0) {
+                  extraInfo.push(`Crédito Cashea: $${mp.credito_cashea_usd}`);
+                }
+                return (
+                  <div key={i} className="pos-totals__row">
+                    <span>{mp.metodo} {extraInfo.length > 0 ? `(${extraInfo.join(' | ')})` : ''}</span>
+                    <span>{formatUSD(mp.monto_usd)}</span>
+                  </div>
+                );
+              })}
 
               <div className="pos-payment-actions" style={{ marginTop: '1.5rem' }}>
                 {showDetalle.estado === 'emitida' && (

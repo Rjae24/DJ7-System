@@ -70,23 +70,20 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
             </div>
           )}
 
-          {/* Close button for mobile */}
+          {/* Toggle / Close button */}
           <button
-            className="sidebar__toggle sidebar__toggle--mobile"
-            onClick={() => setMobileOpen(false)}
-            aria-label="Cerrar menú móvil"
+            className="sidebar__toggle"
+            onClick={() => {
+              if (mobileOpen) {
+                setMobileOpen(false);
+              } else {
+                setCollapsed(!collapsed);
+              }
+            }}
+            aria-label={mobileOpen ? "Cerrar menú" : (collapsed ? "Expandir menú" : "Contraer menú")}
+            title={mobileOpen ? "Cerrar menú" : (collapsed ? "Expandir menú" : "Contraer menú")}
           >
-            <HiOutlineXMark />
-          </button>
-
-          {/* Collapse toggle for desktop */}
-          <button
-            className="sidebar__toggle sidebar__toggle--desktop"
-            onClick={() => setCollapsed(!collapsed)}
-            aria-label="Colapsar menú"
-            title={collapsed ? "Expandir menú" : "Contraer menú"}
-          >
-            {collapsed ? <HiOutlineBars3 /> : <HiOutlineXMark />}
+            {collapsed && !mobileOpen ? <HiOutlineBars3 /> : <HiOutlineXMark />}
           </button>
         </div>
 
