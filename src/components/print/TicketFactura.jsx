@@ -252,23 +252,25 @@ export default function TicketFactura({ factura, onClose }) {
             <span>Cant. Artículos:</span>
             <span><strong>{totalCantidad} und.</strong></span>
           </div>
-          <div className="ticket__row">
-            <span>Subtotal:</span>
-            <span>{formatUSD(factura.subtotal_usd || factura.total_usd)}</span>
-          </div>
-          {factura.descuento_usd > 0 && (
-            <div className="ticket__row">
-              <span>Descuento:</span>
-              <span>-{formatUSD(factura.descuento_usd)}</span>
-            </div>
-          )}
+          {factura.descuento_usd > 0 ? (
+            <>
+              <div className="ticket__row">
+                <span>Subtotal:</span>
+                <span>{formatUSD(factura.subtotal_usd || factura.total_usd)}</span>
+              </div>
+              <div className="ticket__row">
+                <span>Descuento:</span>
+                <span>-{formatUSD(factura.descuento_usd)}</span>
+              </div>
+            </>
+          ) : null}
           <div className="ticket__row ticket__row--bold">
-            <span>Total General USD:</span>
+            <span>Total USD:</span>
             <span>{formatUSD(factura.total_usd)}</span>
           </div>
           <div className="ticket__row">
             <span>Tasa BCV:</span>
-            <span>Bs {formatTasa(tasa?.tasa_usd_bs || tasa)}</span>
+            <span>{formatTasa(tasa?.tasa_usd_bs || tasa)}</span>
           </div>
           <div className="ticket__row ticket__row--bold">
             <span>Total Bs:</span>
@@ -284,7 +286,7 @@ export default function TicketFactura({ factura, onClose }) {
           {metodosPago.map((mp, i) => (
             <div key={i} className="ticket__payment-item">
               <div className="ticket__row">
-                <span>{mp.metodo}:</span>
+                <span>{mp.metodo_id === 'cashea' ? 'Cashea (Inicial)' : mp.metodo}:</span>
                 <span>{formatUSD(mp.monto_usd)}</span>
               </div>
               {mp.monto_bs && (
@@ -295,14 +297,14 @@ export default function TicketFactura({ factura, onClose }) {
               {mp.metodo_id === 'cashea' && (
                 <>
                   <div className="ticket__ref" style={{ fontWeight: '600' }}>
-                    Inicial vía {mp.cashea_metodo_inicial_label || mp.cashea_metodo_inicial || 'Punto de Venta'}: {formatUSD(mp.inicial_usd || mp.monto_usd)}
+                    Método Inicial: {mp.cashea_metodo_inicial_label || mp.cashea_metodo_inicial || 'Punto de Venta'}
                   </div>
                   {mp.cashea_referencia_inicial && (
                     <div className="ticket__ref">Ref. Inicial: {mp.cashea_referencia_inicial}</div>
                   )}
                   {mp.credito_cashea_usd > 0 && (
                     <div className="ticket__ref" style={{ fontWeight: 'bold' }}>
-                      Crédito Cashea: {formatUSD(mp.credito_cashea_usd)} (Bs {formatBs(mp.credito_cashea_bs)})
+                      Crédito Cashea: {formatUSD(mp.credito_cashea_usd)} ({formatBs(mp.credito_cashea_bs)})
                     </div>
                   )}
                 </>
