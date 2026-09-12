@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { METODOS_PAGO } from '../utils/constants';
+import { METODOS_PAGO, METODOS_INICIAL_CASHEA } from '../utils/constants';
 import { formatUSD, formatBs, formatTasa } from '../utils/formatters';
 import toast from 'react-hot-toast';
 import TicketFactura from '../components/print/TicketFactura';
@@ -305,6 +305,7 @@ export default function POS() {
           const inicialBs = parseFloat((inicialUSD * tasa).toFixed(2));
           const creditoUSD = parseFloat((totalUSD - totalPagado).toFixed(2));
           const creditoBs = parseFloat((creditoUSD * tasa).toFixed(2));
+          const metodoInicialConfig = METODOS_INICIAL_CASHEA.find(m => m.id === mp.cashea_metodo_inicial);
           return {
             metodo: 'Cashea',
             metodo_id: 'cashea',
@@ -312,6 +313,9 @@ export default function POS() {
             monto_bs: inicialBs,
             inicial_usd: inicialUSD,
             inicial_bs: inicialBs,
+            cashea_metodo_inicial: mp.cashea_metodo_inicial || 'punto_venta',
+            cashea_metodo_inicial_label: metodoInicialConfig?.label || 'Punto de Venta',
+            cashea_referencia_inicial: mp.cashea_referencia_inicial || '',
             credito_cashea_usd: creditoUSD,
             credito_cashea_bs: creditoBs,
             referencia: mp.referencia || '',
@@ -328,7 +332,7 @@ export default function POS() {
         };
       });
 
-      // Insert invoice without subtotal_usd if it's a generated/default column
+      // Insert invoice without subtotal_usd since subtotal_usd is a generated column in Supabase
       const invoicePayload = {
         numero_factura: numData,
         cliente_id: clienteSeleccionado.id,
@@ -340,19 +344,19 @@ export default function POS() {
         metodos_pago: metodosStorage,
       };
 
-      // Try inserting with subtotal_usd; if schema complains it's a generated column, retry without it
       let factura;
       const { data: factData, error: factError } = await supabase
         .from('facturas')
-        .insert({ ...invoicePayload, subtotal_usd: subtotalUSD })
+        .insert(invoicePayload)
         .select()
         .single();
 
       if (factError) {
-        if (factError.message?.includes('subtotal_usd') || factError.code === '428C9') {
+        // Fallback: if schema strictly requires subtotal_usd or has different column requirements
+        if (factError.message?.includes('subtotal_usd')) {
           const { data: retryData, error: retryError } = await supabase
             .from('facturas')
-            .insert(invoicePayload)
+            .insert({ ...invoicePayload, subtotal_usd: subtotalUSD })
             .select()
             .single();
           if (retryError) throw retryError;
@@ -364,20 +368,34 @@ export default function POS() {
         factura = factData;
       }
 
-      // Insert invoice details
-      const detalles = carrito.map(item => ({
+      // Insert invoice details - omitting subtotal_usd by default in case it is also a generated column
+      const detallesBase = carrito.map(item => ({
         factura_id: factura.id,
         producto_id: item.producto_id,
         producto_nombre: item.producto_nombre,
         cantidad: item.cantidad,
         precio_unitario_usd: item.precio_unitario,
-        subtotal_usd: item.subtotal,
       }));
 
       const { error: detError } = await supabase
         .from('detalles_factura')
-        .insert(detalles);
-      if (detError) throw detError;
+        .insert(detallesBase);
+
+      if (detError) {
+        // If detalles_factura requires subtotal_usd, retry with it
+        if (detError.message?.includes('subtotal_usd') || detError.code === '23502') {
+          const detallesConSubtotal = carrito.map(item => ({
+            ...detallesBase.find(d => d.producto_id === item.producto_id),
+            subtotal_usd: item.subtotal,
+          }));
+          const { error: detRetryError } = await supabase
+            .from('detalles_factura')
+            .insert(detallesConSubtotal);
+          if (detRetryError) throw detRetryError;
+        } else {
+          throw detError;
+        }
+      }
 
       // Success!
       setFacturaEmitida({
@@ -389,7 +407,6 @@ export default function POS() {
         metodos_pago_detalle: metodosStorage,
       });
 
-      
       toast.success(`Factura ${numData} emitida correctamente`);
       
       // Reset form
@@ -716,18 +733,48 @@ export default function POS() {
                             </div>
                           )}
 
-                          {/* Cashea details: Notificación de crédito y comprobante */}
+                          {/* Cashea details: Método de pago de la inicial y notificación */}
                           {metodoConfig?.isCashea && (
-                            <div style={{
-                              background: 'rgba(234, 179, 8, 0.1)',
-                              border: '1px solid rgba(234, 179, 8, 0.3)',
-                              borderRadius: '6px',
-                              padding: '0.5rem 0.65rem',
-                              marginTop: '0.35rem',
-                              fontSize: '0.78rem',
-                              color: '#FACC15'
-                            }}>
-                              <span>El cliente paga esta inicial en tienda. El resto queda a crédito Cashea.</span>
+                            <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                              <div style={{
+                                background: 'rgba(234, 179, 8, 0.1)',
+                                border: '1px solid rgba(234, 179, 8, 0.3)',
+                                borderRadius: '6px',
+                                padding: '0.5rem 0.65rem',
+                                fontSize: '0.78rem',
+                                color: '#FACC15'
+                              }}>
+                                <span>El cliente paga esta inicial en tienda. El resto queda a crédito Cashea.</span>
+                              </div>
+
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                  Método de Pago de la Inicial:
+                                </label>
+                                <select
+                                  value={mp.cashea_metodo_inicial || 'punto_venta'}
+                                  onChange={(e) => actualizarMetodoPago(index, 'cashea_metodo_inicial', e.target.value)}
+                                  style={{ marginTop: '0.2rem' }}
+                                >
+                                  {METODOS_INICIAL_CASHEA.map(mi => (
+                                    <option key={mi.id} value={mi.id}>
+                                      {mi.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* Referencia opcional para el pago de la inicial si aplica */}
+                              {METODOS_INICIAL_CASHEA.find(mi => mi.id === (mp.cashea_metodo_inicial || 'punto_venta'))?.requiereReferencia && (
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                  <input
+                                    type="text"
+                                    placeholder="N° Referencia del Pago de la Inicial"
+                                    value={mp.cashea_referencia_inicial || ''}
+                                    onChange={(e) => actualizarMetodoPago(index, 'cashea_referencia_inicial', e.target.value)}
+                                  />
+                                </div>
+                              )}
                             </div>
                           )}
 

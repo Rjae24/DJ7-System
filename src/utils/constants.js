@@ -9,6 +9,16 @@ export const METODOS_PAGO = [
   { id: 'cashea', label: 'Cashea', enBs: true, isCashea: true, requiereReferencia: true },
 ];
 
+// Métodos para pagar la inicial de Cashea
+export const METODOS_INICIAL_CASHEA = [
+  { id: 'punto_venta', label: 'Punto de Venta', requiereReferencia: true },
+  { id: 'pago_movil', label: 'Pago Móvil', requiereReferencia: true },
+  { id: 'efectivo_usd', label: 'Efectivo USD', requiereReferencia: false },
+  { id: 'efectivo_bs', label: 'Efectivo Bs', requiereReferencia: false },
+  { id: 'transferencia', label: 'Transferencia', requiereReferencia: true },
+  { id: 'zelle', label: 'Zelle', requiereReferencia: true },
+];
+
 // Roles del sistema
 export const ROLES = {
   ADMIN: 'admin',

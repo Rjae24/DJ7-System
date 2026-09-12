@@ -270,10 +270,20 @@ export default function TicketFactura({ factura, onClose }) {
                   Eq. {formatBs(mp.monto_bs)}
                 </div>
               )}
-              {mp.metodo_id === 'cashea' && mp.credito_cashea_usd > 0 && (
-                <div className="ticket__ref" style={{ fontWeight: 'bold' }}>
-                  Crédito Cashea: {formatUSD(mp.credito_cashea_usd)} (Bs {formatBs(mp.credito_cashea_bs)})
-                </div>
+              {mp.metodo_id === 'cashea' && (
+                <>
+                  <div className="ticket__ref" style={{ fontWeight: '600' }}>
+                    Inicial vía {mp.cashea_metodo_inicial_label || mp.cashea_metodo_inicial || 'Punto de Venta'}: {formatUSD(mp.inicial_usd || mp.monto_usd)}
+                  </div>
+                  {mp.cashea_referencia_inicial && (
+                    <div className="ticket__ref">Ref. Inicial: {mp.cashea_referencia_inicial}</div>
+                  )}
+                  {mp.credito_cashea_usd > 0 && (
+                    <div className="ticket__ref" style={{ fontWeight: 'bold' }}>
+                      Crédito Cashea: {formatUSD(mp.credito_cashea_usd)} (Bs {formatBs(mp.credito_cashea_bs)})
+                    </div>
+                  )}
+                </>
               )}
               {mp.zelle_titular && (
                 <div className="ticket__ref">Emisor: {mp.zelle_titular}</div>

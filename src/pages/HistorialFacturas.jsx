@@ -210,6 +210,10 @@ export default function HistorialFacturas() {
               <h4 style={{ marginTop: '1rem' }}>Métodos de Pago</h4>
               {(showDetalle.metodos_pago || []).map((mp, i) => {
                 const extraInfo = [];
+                if (mp.metodo_id === 'cashea' && (mp.cashea_metodo_inicial_label || mp.cashea_metodo_inicial)) {
+                  extraInfo.push(`Inicial vía: ${mp.cashea_metodo_inicial_label || mp.cashea_metodo_inicial}`);
+                  if (mp.cashea_referencia_inicial) extraInfo.push(`Ref Inicial: ${mp.cashea_referencia_inicial}`);
+                }
                 if (mp.zelle_titular) extraInfo.push(`Emisor: ${mp.zelle_titular}`);
                 if (mp.zelle_email) extraInfo.push(`Correo: ${mp.zelle_email}`);
                 if (mp.referencia) extraInfo.push(mp.metodo_id === 'cashea' ? `Orden: ${mp.referencia}` : `Ref: ${mp.referencia}`);
