@@ -9,7 +9,127 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
   const empresa = getEmpresaConfig();
 
   function handlePrint() {
-    window.print();
+    const ticketElem = document.getElementById('ticket-container');
+    if (!ticketElem) {
+      window.print();
+      return;
+    }
+
+    // Create an isolated hidden iframe for printing
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Imprimir Factura - ${factura.numero_factura || ''}</title>
+          <style>
+            @page {
+              margin: 0;
+              size: auto;
+            }
+            body {
+              margin: 0;
+              padding: 4mm 2mm;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 11px;
+              line-height: 1.35;
+              color: #000;
+              background: #fff;
+              width: ${config.width};
+            }
+            * {
+              box-sizing: border-box;
+            }
+            .ticket__header {
+              text-align: center;
+              margin-bottom: 6px;
+            }
+            .ticket__logo {
+              width: 45px;
+              height: 45px;
+              border-radius: 4px;
+              object-fit: cover;
+              margin-bottom: 4px;
+            }
+            .ticket__empresa {
+              font-weight: bold;
+              font-size: 12px;
+            }
+            .ticket__divider {
+              border-top: 1px dashed #000;
+              margin: 5px 0;
+            }
+            .ticket__info {
+              margin-bottom: 4px;
+            }
+            .ticket__row {
+              display: flex;
+              justify-content: space-between;
+              gap: 4px;
+            }
+            .ticket__row--bold {
+              font-weight: bold;
+              font-size: 12px;
+            }
+            .ticket__items {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            .ticket__items th {
+              font-size: 10px;
+              border-bottom: 1px solid #000;
+              padding: 2px 0;
+              text-transform: uppercase;
+            }
+            .ticket__items td {
+              padding: 2px 0;
+              font-size: 10px;
+              vertical-align: top;
+            }
+            .ticket__totals {
+              margin: 4px 0;
+            }
+            .ticket__section-title {
+              font-weight: bold;
+              font-size: 10px;
+              margin-bottom: 2px;
+            }
+            .ticket__ref {
+              font-size: 9px;
+              color: #444;
+              padding-left: 6px;
+            }
+            .ticket__footer {
+              text-align: center;
+              margin-top: 8px;
+              font-size: 9px;
+            }
+          </style>
+        </head>
+        <body>
+          ${ticketElem.innerHTML}
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 2000);
+    }, 250);
   }
 
   // Normalize details
@@ -18,27 +138,6 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
   const vendedor = factura.vendedor || factura.usuarios;
   const tasa = factura.tasa || factura.tasas_cambio;
   const metodosPago = factura.metodos_pago_detalle || factura.metodos_pago || [];
-
-  // Calculate IVA & breakdown if not explicitly present on the object
-  const gravados = detalles.filter(d => d.aplica_iva !== false);
-  const exentos = detalles.filter(d => d.aplica_iva === false);
-
-  const subtotalGravadoUSD = factura.subtotal_gravado_usd ?? gravados.reduce((sum, item) => {
-    const p = item.precio_unitario || item.precio_unitario_usd || 0;
-    return sum + (item.subtotal || item.subtotal_usd || item.cantidad * p);
-  }, 0);
-
-  const subtotalExentoUSD = factura.subtotal_exento_usd ?? exentos.reduce((sum, item) => {
-    const p = item.precio_unitario || item.precio_unitario_usd || 0;
-    return sum + (item.subtotal || item.subtotal_usd || item.cantidad * p);
-  }, 0);
-
-  const ivaUSD = factura.iva_usd ?? gravados.reduce((sum, item) => {
-    const p = item.precio_unitario || item.precio_unitario_usd || 0;
-    const sub = item.subtotal || item.subtotal_usd || item.cantidad * p;
-    const pct = item.porcentaje_iva ?? empresa.iva_porcentaje ?? 16;
-    return sum + (sub * (pct / 100));
-  }, 0);
 
   return (
     <div className="ticket-overlay">
@@ -127,15 +226,9 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
             {detalles.map((item, i) => {
               const precio = item.precio_unitario || item.precio_unitario_usd || 0;
               const subtotal = item.subtotal || item.subtotal_usd || (item.cantidad * precio);
-              const isExento = item.aplica_iva === false;
               return (
                 <tr key={i}>
-                  <td>
-                    {item.producto_nombre || item.nombre}
-                    <span style={{ fontSize: '8px', color: '#777', marginLeft: '3px' }}>
-                      ({isExento ? 'E' : 'G'})
-                    </span>
-                  </td>
+                  <td>{item.producto_nombre || item.nombre}</td>
                   <td style={{ textAlign: 'center' }}>{item.cantidad}</td>
                   <td style={{ textAlign: 'right' }}>{formatUSD(subtotal)}</td>
                 </tr>
@@ -150,26 +243,8 @@ export default function TicketFactura({ factura, onClose, initialWidth = '80mm' 
         <div className="ticket__totals">
           <div className="ticket__row">
             <span>Subtotal:</span>
-            <span>{formatUSD(factura.subtotal_usd || (subtotalGravadoUSD + subtotalExentoUSD))}</span>
+            <span>{formatUSD(factura.subtotal_usd || factura.total_usd)}</span>
           </div>
-          {subtotalGravadoUSD > 0 && (
-            <div className="ticket__row" style={{ fontSize: '9px', color: '#555' }}>
-              <span>Base Imp. (G):</span>
-              <span>{formatUSD(subtotalGravadoUSD)}</span>
-            </div>
-          )}
-          {subtotalExentoUSD > 0 && (
-            <div className="ticket__row" style={{ fontSize: '9px', color: '#555' }}>
-              <span>Exento (E):</span>
-              <span>{formatUSD(subtotalExentoUSD)}</span>
-            </div>
-          )}
-          {ivaUSD > 0 && (
-            <div className="ticket__row">
-              <span>IVA ({empresa.iva_porcentaje || 16}%):</span>
-              <span>{formatUSD(ivaUSD)}</span>
-            </div>
-          )}
           {factura.descuento_usd > 0 && (
             <div className="ticket__row">
               <span>Descuento:</span>

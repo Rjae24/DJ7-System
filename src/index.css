@@ -192,12 +192,76 @@ a:hover { color: var(--primary-hover); }
   min-height: 100vh;
 }
 
-.app-layout__main {
+.app-layout__content {
   flex: 1;
   margin-left: var(--sidebar-width);
-  padding: 0;
-  transition: var(--transition-slow);
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  transition: var(--transition-slow);
+}
+
+.app-layout--collapsed .app-layout__content {
+  margin-left: var(--sidebar-collapsed);
+}
+
+.app-layout__main {
+  flex: 1;
+  padding: 0;
+  min-width: 0;
+}
+
+/* Mobile top header with hamburger button */
+.mobile-topbar {
+  display: none;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+
+.mobile-topbar__hamburger {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  font-size: 1.4rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.mobile-topbar__hamburger:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.mobile-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mobile-topbar__logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.mobile-topbar__title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 /* ============================================
@@ -222,8 +286,12 @@ a:hover { color: var(--primary-hover); }
   width: var(--sidebar-collapsed);
 }
 
-.sidebar--collapsed ~ .app-layout__main {
-  margin-left: var(--sidebar-collapsed);
+.sidebar__toggle--mobile {
+  display: none;
+}
+
+.sidebar__toggle--desktop {
+  display: flex;
 }
 
 .sidebar__header {
@@ -1444,38 +1512,60 @@ a:hover { color: var(--primary-hover); }
    PRINT MEDIA QUERIES
    ============================================ */
 @media print {
-  /* Hide UI elements */
+  /* Ocultar elementos generales de la app */
   .no-print,
   .sidebar,
   .sidebar-overlay,
-  .ticket-overlay > *:not(#ticket-container) {
+  .mobile-topbar,
+  .ticket-controls,
+  .app-layout > *:not(.ticket-overlay),
+  .page,
+  .pos-layout {
     display: none !important;
   }
 
-  html, body {
+  /* Cuando el ticket está abierto, ocultar todo lo que no sea el ticket */
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
-    background: white !important;
-    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Thermal ticket print */
-  body:has(#ticket-container) * {
-    visibility: hidden !important;
+  .ticket-overlay {
+    position: static !important;
+    display: block !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    z-index: auto !important;
   }
 
-  #ticket-container,
-  #ticket-container * {
-    visibility: visible !important;
+  .ticket-controls {
+    display: none !important;
   }
 
   #ticket-container {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100% !important;
-    background: white !important;
-    color: black !important;
+    display: block !important;
+    position: relative !important;
+    margin: 0 auto !important;
+    padding: 4mm 2mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    page-break-inside: avoid !important;
+  }
+
+  #ticket-container * {
+    color: #000000 !important;
+    background: transparent !important;
   }
 
   /* Full report print */
@@ -1524,27 +1614,47 @@ a:hover { color: var(--primary-hover); }
 }
 
 @media (max-width: 768px) {
+  .mobile-topbar {
+    display: flex;
+  }
+
   .sidebar {
+    width: var(--sidebar-width) !important;
     transform: translateX(-100%);
+    box-shadow: none;
+    z-index: 1000;
   }
   
-  .sidebar:not(.sidebar--collapsed) {
+  .sidebar.sidebar--mobile-open {
     transform: translateX(0);
-    box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.6);
+  }
+
+  .sidebar__toggle--mobile {
+    display: flex;
+  }
+
+  .sidebar__toggle--desktop {
+    display: none;
   }
   
   .sidebar-overlay {
-    display: block;
+    display: none;
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0,0,0,0.5);
-    z-index: 99;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(2px);
+    z-index: 999;
+  }
+
+  .sidebar-overlay.sidebar-overlay--visible {
+    display: block;
   }
   
-  .app-layout__main {
+  .app-layout__content {
     margin-left: 0 !important;
   }
   

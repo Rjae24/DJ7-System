@@ -6,7 +6,6 @@ import {
   HiOutlineIdentification,
   HiOutlineMapPin,
   HiOutlinePhone,
-  HiOutlineReceiptPercent,
   HiOutlineSparkles,
   HiOutlineArrowPath,
   HiOutlineCheck,
@@ -133,22 +132,6 @@ export default function Configuracion() {
                   value={config.slogan}
                   onChange={e => handleChange('slogan', e.target.value)}
                   placeholder="Ej. ¡Gracias por su compra!"
-                />
-              </div>
-
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <HiOutlineReceiptPercent /> IVA Estándar (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  value={config.iva_porcentaje}
-                  onChange={e => handleChange('iva_porcentaje', parseFloat(e.target.value) || 0)}
-                  placeholder="16"
-                  required
                 />
               </div>
             </div>

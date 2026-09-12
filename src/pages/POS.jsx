@@ -155,8 +155,6 @@ export default function POS() {
           : item
       ));
     } else {
-      const aplicaIva = producto.aplica_iva !== false;
-      const porcentajeIva = aplicaIva ? (producto.porcentaje_iva ?? 16) : 0;
       setCarrito([...carrito, {
         producto_id: producto.id,
         producto_nombre: producto.nombre,
@@ -164,8 +162,6 @@ export default function POS() {
         cantidad: 1,
         subtotal: parseFloat(producto.precio_usd),
         stock_disponible: producto.stock,
-        aplica_iva: aplicaIva,
-        porcentaje_iva: porcentajeIva,
       }]);
     }
     setProductoSearch('');
@@ -193,23 +189,10 @@ export default function POS() {
     setCarrito(carrito.filter(i => i.producto_id !== productoId));
   }
 
-  // Calculate totals with IVA breakdown
-  const subtotalGravadoUSD = carrito
-    .filter(item => item.aplica_iva)
-    .reduce((sum, item) => sum + item.subtotal, 0);
-
-  const subtotalExentoUSD = carrito
-    .filter(item => !item.aplica_iva)
-    .reduce((sum, item) => sum + item.subtotal, 0);
-
-  const ivaUSD = carrito
-    .filter(item => item.aplica_iva)
-    .reduce((sum, item) => sum + (item.subtotal * (item.porcentaje_iva / 100)), 0);
-
-  const subtotalUSD = subtotalGravadoUSD + subtotalExentoUSD;
-  const totalUSD = subtotalUSD + ivaUSD;
+  // Calculate totals
+  const subtotalUSD = carrito.reduce((sum, item) => sum + item.subtotal, 0);
+  const totalUSD = subtotalUSD;
   const totalBs = tasaHoy ? totalUSD * parseFloat(tasaHoy.tasa_usd_bs) : 0;
-  const ivaBs = tasaHoy ? ivaUSD * parseFloat(tasaHoy.tasa_usd_bs) : 0;
 
 
   // Payment methods management
@@ -301,10 +284,6 @@ export default function POS() {
         tasa: tasaHoy,
         vendedor: profile,
         metodos_pago_detalle: metodosStorage,
-        subtotal_gravado_usd: subtotalGravadoUSD,
-        subtotal_exento_usd: subtotalExentoUSD,
-        iva_usd: ivaUSD,
-        iva_bs: ivaBs,
       });
 
       
@@ -473,9 +452,6 @@ export default function POS() {
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span className="search-result-item__name">{p.nombre}</span>
-                        <span className={`badge badge--xs ${p.aplica_iva === false ? 'badge--ghost' : 'badge--primary'}`}>
-                          {p.aplica_iva === false ? 'Exento' : `IVA ${p.porcentaje_iva ?? 16}%`}
-                        </span>
                       </div>
                       <span className="search-result-item__sub">{p.sku} — Stock: {p.stock}</span>
                     </div>
@@ -496,12 +472,7 @@ export default function POS() {
                 {carrito.map(item => (
                   <div key={item.producto_id} className="pos-cart-item">
                     <div className="pos-cart-item__info">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                        <span className="pos-cart-item__name">{item.producto_nombre}</span>
-                        <span style={{ fontSize: '0.7rem', color: item.aplica_iva ? '#EF4444' : '#888', fontWeight: 600 }}>
-                          ({item.aplica_iva ? `G ${item.porcentaje_iva}%` : 'E'})
-                        </span>
-                      </div>
+                      <span className="pos-cart-item__name">{item.producto_nombre}</span>
                       <span className="pos-cart-item__price">{formatUSD(item.precio_unitario)} c/u</span>
                     </div>
                     <div className="pos-cart-item__controls">
@@ -533,28 +504,6 @@ export default function POS() {
             <h3 className="card__title">Resumen</h3>
             
             <div className="pos-totals">
-              <div className="pos-totals__row">
-                <span>Subtotal</span>
-                <span>{formatUSD(subtotalUSD)}</span>
-              </div>
-              {subtotalGravadoUSD > 0 && (
-                <div className="pos-totals__row" style={{ fontSize: '0.82rem', color: '#999' }}>
-                  <span>Base Imponible (G)</span>
-                  <span>{formatUSD(subtotalGravadoUSD)}</span>
-                </div>
-              )}
-              {subtotalExentoUSD > 0 && (
-                <div className="pos-totals__row" style={{ fontSize: '0.82rem', color: '#999' }}>
-                  <span>Monto Exento (E)</span>
-                  <span>{formatUSD(subtotalExentoUSD)}</span>
-                </div>
-              )}
-              {ivaUSD > 0 && (
-                <div className="pos-totals__row">
-                  <span>IVA</span>
-                  <span>{formatUSD(ivaUSD)}</span>
-                </div>
-              )}
               <div className="pos-totals__row pos-totals__row--total">
                 <span>Total USD</span>
                 <span>{formatUSD(totalUSD)}</span>

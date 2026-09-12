@@ -38,8 +38,7 @@ const vendedorLinks = [
   { to: '/dashboard', icon: HiOutlineHome, label: 'Mi Dashboard' },
 ];
 
-export default function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
   const { profile, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -53,14 +52,14 @@ export default function Sidebar() {
   return (
     <>
       {/* Mobile overlay */}
-      {!collapsed && (
+      {mobileOpen && (
         <div
-          className="sidebar-overlay"
-          onClick={() => setCollapsed(true)}
+          className="sidebar-overlay sidebar-overlay--visible"
+          onClick={() => setMobileOpen(false)}
         />
       )}
 
-      <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''}`}>
+      <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''} ${mobileOpen ? 'sidebar--mobile-open' : ''}`}>
         {/* Header */}
         <div className="sidebar__header">
           <img src="/logo-dj7.jpg" alt="DJ7" className="sidebar__logo" />
@@ -70,10 +69,22 @@ export default function Sidebar() {
               <span>Sistema</span>
             </div>
           )}
+
+          {/* Close button for mobile */}
           <button
-            className="sidebar__toggle"
+            className="sidebar__toggle sidebar__toggle--mobile"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Cerrar menú móvil"
+          >
+            <HiOutlineXMark />
+          </button>
+
+          {/* Collapse toggle for desktop */}
+          <button
+            className="sidebar__toggle sidebar__toggle--desktop"
             onClick={() => setCollapsed(!collapsed)}
-            aria-label="Toggle sidebar"
+            aria-label="Colapsar menú"
+            title={collapsed ? "Expandir menú" : "Contraer menú"}
           >
             {collapsed ? <HiOutlineBars3 /> : <HiOutlineXMark />}
           </button>
