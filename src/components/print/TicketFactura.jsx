@@ -160,6 +160,31 @@ export default function TicketFactura({ factura, onClose }) {
               font-weight: bold !important;
               padding-left: 6px;
             }
+            .ticket__cashea-box {
+              border: 1px dashed #000 !important;
+              padding: 4px 6px !important;
+              margin: 5px 0 !important;
+            }
+            .ticket__cashea-title {
+              font-weight: bold !important;
+              font-size: 11px !important;
+              text-transform: uppercase !important;
+              border-bottom: 1px solid #000 !important;
+              padding-bottom: 2px !important;
+              margin-bottom: 4px !important;
+            }
+            .ticket__cashea-deuda {
+              margin-top: 4px !important;
+              padding-top: 3px !important;
+              border-top: 1px dotted #000 !important;
+              font-weight: bold !important;
+            }
+            .ticket__cashea-note {
+              font-size: 9px !important;
+              font-style: italic !important;
+              margin-top: 2px !important;
+              color: #000 !important;
+            }
             .ticket__footer {
               text-align: center;
               margin-top: 8px;
@@ -347,45 +372,192 @@ export default function TicketFactura({ factura, onClose }) {
         {/* Payment Methods */}
         <div className="ticket__payments">
           <div className="ticket__section-title">PAGOS:</div>
-          {metodosPago.map((mp, i) => (
-            <div key={i} className="ticket__payment-item">
-              <div className="ticket__row">
-                <span>{mp.metodo_id === 'cashea' ? 'Cashea (Inicial)' : mp.metodo}:</span>
-                <span>{formatUSD(mp.monto_usd)}</span>
-              </div>
-              {mp.monto_bs && (
-                <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
-                  Eq. {formatBs(mp.monto_bs)}
-                </div>
-              )}
-              {mp.metodo_id === 'cashea' && (
-                <>
-                  <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
-                    Método Inicial: {mp.cashea_metodo_inicial_label || mp.cashea_metodo_inicial || 'Punto de Venta'}
+          {(() => {
+            const esMetodoEnBs = (mp) => {
+              if (!mp) return false;
+              const id = (mp.metodo_id || mp.id || '').toLowerCase();
+              const nombre = (mp.metodo || mp.label || '').toLowerCase();
+              return (
+                id === 'punto_venta' ||
+                id === 'pago_movil' ||
+                id === 'efectivo_bs' ||
+                id === 'transferencia' ||
+                nombre.includes('punto') ||
+                nombre.includes('pago móvil') ||
+                nombre.includes('pago movil') ||
+                nombre.includes('efectivo bs') ||
+                nombre.includes('transferencia') ||
+                nombre.includes('bolívares') ||
+                nombre.includes('bolivares') ||
+                mp.enBs === true
+              );
+            };
+
+            const casheaItem = metodosPago.find(mp => mp.metodo_id === 'cashea' || mp.metodo?.toLowerCase?.().includes('cashea'));
+            
+            if (casheaItem) {
+              const otrosMetodos = metodosPago.filter(mp => mp !== casheaItem);
+              
+              // Build breakdown of all methods used to pay the initial
+              let desgloseInicial = [];
+              if (Array.isArray(casheaItem.desglose_inicial) && casheaItem.desglose_inicial.length > 0) {
+                desgloseInicial = casheaItem.desglose_inicial;
+              } else {
+                const casheaPropio = parseFloat(casheaItem.inicial_usd ?? casheaItem.monto_usd ?? 0);
+                if (casheaPropio > 0 || otrosMetodos.length === 0) {
+                  desgloseInicial.push({
+                    metodo: casheaItem.cashea_metodo_inicial_label || casheaItem.cashea_metodo_inicial || 'Punto de Venta',
+                    metodo_id: casheaItem.cashea_metodo_inicial || 'punto_venta',
+                    monto_usd: casheaPropio,
+                    monto_bs: casheaItem.inicial_bs || (tasaNum > 0 ? parseFloat((casheaPropio * tasaNum).toFixed(2)) : 0),
+                    referencia: casheaItem.cashea_referencia_inicial,
+                  });
+                }
+                otrosMetodos.forEach(om => {
+                  const omUSD = parseFloat(om.monto_usd || 0);
+                  desgloseInicial.push({
+                    metodo: om.metodo,
+                    metodo_id: om.metodo_id,
+                    monto_usd: omUSD,
+                    monto_bs: om.monto_bs || (tasaNum > 0 ? parseFloat((omUSD * tasaNum).toFixed(2)) : 0),
+                    referencia: om.referencia,
+                    titular: om.zelle_titular,
+                  });
+                });
+              }
+
+              const totalInicialUSD = desgloseInicial.reduce((s, d) => s + (parseFloat(d.monto_usd) || 0), 0);
+              const totalInicialBs = tasaNum > 0 ? parseFloat((totalInicialUSD * tasaNum).toFixed(2)) : 0;
+
+              let debiendoUSD = 0;
+              if (casheaItem.credito_cashea_usd !== undefined && casheaItem.credito_cashea_usd !== null && !isNaN(Number(casheaItem.credito_cashea_usd))) {
+                debiendoUSD = parseFloat(casheaItem.credito_cashea_usd);
+              } else {
+                debiendoUSD = Math.max(0, parseFloat(((parseFloat(factura.total_usd) || 0) - totalInicialUSD).toFixed(2)));
+              }
+
+              let debiendoBs = 0;
+              if (casheaItem.credito_cashea_bs !== undefined && casheaItem.credito_cashea_bs !== null && !isNaN(Number(casheaItem.credito_cashea_bs)) && Number(casheaItem.credito_cashea_bs) > 0) {
+                debiendoBs = parseFloat(casheaItem.credito_cashea_bs);
+              } else if (tasaNum > 0 && debiendoUSD > 0) {
+                debiendoBs = parseFloat((debiendoUSD * tasaNum).toFixed(2));
+              }
+
+              return (
+                <div className="ticket__payment-item ticket__cashea-box" style={{ border: '1px dashed #000', padding: '4px 6px', margin: '5px 0' }}>
+                  <div className="ticket__cashea-title" style={{ fontWeight: 'bold', fontSize: '11px', textTransform: 'uppercase', borderBottom: '1px solid #000', paddingBottom: '2px', marginBottom: '4px' }}>
+                    PAGO FINANCIADO CASHEA
                   </div>
-                  {mp.cashea_referencia_inicial && (
-                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Ref. Inicial: {mp.cashea_referencia_inicial}</div>
-                  )}
-                  {mp.credito_cashea_usd > 0 && (
-                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
-                      Crédito Cashea: {formatUSD(mp.credito_cashea_usd)} ({formatBs(mp.credito_cashea_bs)})
+
+                  {/* Inicial Pagada Total */}
+                  <div className="ticket__row" style={{ fontWeight: 'bold' }}>
+                    <span>Inicial Pagada:</span>
+                    <span>{formatUSD(totalInicialUSD)}</span>
+                  </div>
+                  {totalInicialBs > 0 && (
+                    <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
+                      Ref. Inicial: {formatBs(totalInicialBs)}
                     </div>
                   )}
-                </>
-              )}
-              {mp.zelle_titular && (
-                <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Emisor: {mp.zelle_titular}</div>
-              )}
-              {mp.zelle_email && (
-                <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Correo: {mp.zelle_email}</div>
-              )}
-              {mp.referencia && (
-                <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
-                  {mp.metodo_id === 'cashea' ? 'Orden Cashea: ' : 'Ref: '}{mp.referencia}
+
+                  {/* Desglose de Métodos de la Inicial */}
+                  <div style={{ marginTop: '3px', paddingTop: '3px', borderTop: '1px dotted #000' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: '#000', marginBottom: '2px' }}>
+                      Métodos de Pago de la Inicial:
+                    </div>
+                    {desgloseInicial.map((di, idx) => {
+                      const diUSD = parseFloat(di.monto_usd || 0);
+                      const diBs = di.monto_bs !== undefined && di.monto_bs !== null && Number(di.monto_bs) > 0
+                        ? Number(di.monto_bs)
+                        : (tasaNum > 0 ? diUSD * tasaNum : 0);
+                      const isBs = esMetodoEnBs(di);
+
+                      return (
+                        <div key={idx} className="ticket__ref" style={{ color: '#000', fontWeight: 'bold', paddingLeft: '4px' }}>
+                          • {di.metodo}: {isBs ? `${formatBs(diBs)} (Ref. ${formatUSD(diUSD)})` : `${formatUSD(diUSD)}`}
+                          {di.referencia ? ` (N° Op: ${di.referencia})` : ''}
+                          {di.titular ? ` (Emisor: ${di.titular})` : ''}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {casheaItem.referencia && (
+                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000', marginTop: '4px', borderTop: '1px dotted #000', paddingTop: '2px' }}>
+                      N° Orden Cashea: {casheaItem.referencia}
+                    </div>
+                  )}
+
+                  {/* Monto Financiado Cashea */}
+                  <div className="ticket__row ticket__cashea-deuda" style={{ marginTop: '4px', paddingTop: '3px', borderTop: '1px dotted #000', fontWeight: 'bold' }}>
+                    <span>Monto Financiado Cashea:</span>
+                    <span>{formatUSD(debiendoUSD)}</span>
+                  </div>
+                  {debiendoBs > 0 && (
+                    <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
+                      Ref. Financiado: {formatBs(debiendoBs)}
+                    </div>
+                  )}
+                  <div className="ticket__cashea-note" style={{ fontSize: '9px', fontStyle: 'italic', marginTop: '2px', color: '#000' }}>
+                    * Cuotas a pagar por el cliente a través de Cashea
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+              );
+            }
+
+            // Regular payment methods if not a Cashea sale
+            return metodosPago.map((mp, i) => {
+              const montoUSD = parseFloat(mp.monto_usd || 0);
+              const montoBs = mp.monto_bs !== undefined && mp.monto_bs !== null && Number(mp.monto_bs) > 0
+                ? Number(mp.monto_bs)
+                : (tasaNum > 0 ? (montoUSD * tasaNum) : 0);
+              const isBs = esMetodoEnBs(mp);
+
+              if (isBs) {
+                return (
+                  <div key={i} className="ticket__payment-item">
+                    <div className="ticket__row">
+                      <span>{mp.metodo}:</span>
+                      <span>{formatBs(montoBs)}</span>
+                    </div>
+                    <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
+                      Ref. {formatUSD(montoUSD)}
+                    </div>
+                    {mp.referencia && (
+                      <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
+                        N° Op: {mp.referencia}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <div key={i} className="ticket__payment-item">
+                  <div className="ticket__row">
+                    <span>{mp.metodo}:</span>
+                    <span>{formatUSD(montoUSD)}</span>
+                  </div>
+                  {montoBs > 0 && (
+                    <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
+                      Ref. {formatBs(montoBs)}
+                    </div>
+                  )}
+                  {mp.zelle_titular && (
+                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Emisor: {mp.zelle_titular}</div>
+                  )}
+                  {mp.zelle_email && (
+                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Correo: {mp.zelle_email}</div>
+                  )}
+                  {mp.referencia && (
+                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
+                      N° Op: {mp.referencia}
+                    </div>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
 
         <div className="ticket__divider" />

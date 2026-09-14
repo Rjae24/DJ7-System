@@ -3,7 +3,27 @@ import { supabase } from '../lib/supabase';
 import { formatFecha } from '../utils/formatters';
 import toast from 'react-hot-toast';
 import Pagination from '../components/common/Pagination';
-import { HiOutlinePlus, HiOutlinePencilSquare, HiOutlineMagnifyingGlass } from 'react-icons/hi2';
+import { HiOutlinePlus, HiOutlinePencilSquare, HiOutlineMagnifyingGlass, HiOutlineTrash } from 'react-icons/hi2';
+import { FaWhatsapp, FaPhone } from 'react-icons/fa';
+
+import ConfirmModal from '../components/common/ConfirmModal';
+
+function getWhatsAppUrl(tel) {
+  if (!tel) return '';
+  let clean = tel.replace(/\D/g, '');
+  if (clean.startsWith('0') && clean.length === 11) {
+    clean = '58' + clean.slice(1);
+  } else if (!clean.startsWith('58') && clean.length === 10) {
+    clean = '58' + clean;
+  }
+  return `https://wa.me/${clean}`;
+}
+
+function getPhoneCallUrl(tel) {
+  if (!tel) return '';
+  const clean = tel.replace(/[^0-9+]/g, '');
+  return `tel:${clean}`;
+}
 
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);
@@ -13,6 +33,8 @@ export default function Clientes() {
   const [showModal, setShowModal] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ nombre: '', documento_identidad: '', telefono: '', direccion: '', email: '' });
+  const [clienteToDelete, setClienteToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { loadClientes(); }, []);
 
@@ -41,6 +63,23 @@ export default function Clientes() {
       loadClientes();
     } catch (error) {
       toast.error(error.message);
+    }
+  }
+
+  async function handleConfirmDeleteCliente() {
+    if (!clienteToDelete) return;
+    setDeleting(true);
+    try {
+      await supabase.from('facturas').update({ cliente_id: null }).eq('cliente_id', clienteToDelete.id);
+      const { error } = await supabase.from('clientes').delete().eq('id', clienteToDelete.id);
+      if (error) throw error;
+      toast.success(`Cliente "${clienteToDelete.nombre}" eliminado`);
+      setClienteToDelete(null);
+      loadClientes();
+    } catch (err) {
+      toast.error(err.message || 'Error al eliminar el cliente');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -100,11 +139,40 @@ export default function Clientes() {
                 <tr key={c.id}>
                   <td>{c.nombre}</td>
                   <td><code>{c.documento_identidad}</code></td>
-                  <td>{c.telefono || '—'}</td>
+                  <td>
+                    {c.telefono ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>{c.telefono}</span>
+                        <a
+                          href={getWhatsAppUrl(c.telefono)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn--ghost btn--xs"
+                          style={{ color: '#25D366', padding: '2px 5px', fontSize: '0.9rem' }}
+                          title="Enviar WhatsApp"
+                        >
+                          <FaWhatsapp />
+                        </a>
+                        <a
+                          href={getPhoneCallUrl(c.telefono)}
+                          className="btn btn--ghost btn--xs"
+                          style={{ color: '#3B82F6', padding: '2px 5px', fontSize: '0.75rem' }}
+                          title="Llamar"
+                        >
+                          <FaPhone />
+                        </a>
+                      </div>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td>{c.email || '—'}</td>
                   <td>{formatFecha(c.created_at)}</td>
                   <td>
-                    <button className="btn btn--ghost btn--xs" onClick={() => editarCliente(c)}><HiOutlinePencilSquare /></button>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      <button className="btn btn--ghost btn--xs" onClick={() => editarCliente(c)} title="Editar"><HiOutlinePencilSquare /></button>
+                      <button className="btn btn--ghost btn--xs text-danger" onClick={() => setClienteToDelete(c)} title="Eliminar Cliente"><HiOutlineTrash /></button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -158,6 +226,19 @@ export default function Clientes() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Client Deletion */}
+      <ConfirmModal
+        isOpen={!!clienteToDelete}
+        title={`¿Eliminar al cliente "${clienteToDelete?.nombre}"?`}
+        message="Las facturas emitidas a este cliente se conservarán en el historial como registro contable, desvinculando la referencia al cliente eliminado."
+        confirmText="Sí, Eliminar Cliente"
+        cancelText="Cancelar"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDeleteCliente}
+        onCancel={() => !deleting && setClienteToDelete(null)}
+      />
     </div>
   );
 }

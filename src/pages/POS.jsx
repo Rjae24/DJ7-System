@@ -196,9 +196,12 @@ export default function POS() {
 
 
   function agregarMetodoPago(metodoId = '') {
-    const defaultMontoUSD = Math.max(0, parseFloat((restante || 0).toFixed(2)));
     const metodoConfig = METODOS_PAGO.find(m => m.id === metodoId);
     const tasa = tasaHoy ? parseFloat(tasaHoy.tasa_usd_bs) : 0;
+    
+    const otherPayments = metodosPago.reduce((sum, mp) => sum + parseFloat(mp.monto_usd || 0), 0);
+    const pend = Math.max(0, parseFloat((totalUSD - otherPayments).toFixed(2)));
+    const defaultMontoUSD = metodoConfig?.isCashea ? parseFloat((pend * 0.40).toFixed(2)) : pend;
     const montoBs = (metodoConfig?.enBs && tasa > 0) ? parseFloat((defaultMontoUSD * tasa).toFixed(2)) : 0;
 
     setMetodosPago([
@@ -224,14 +227,18 @@ export default function POS() {
     if (field === 'metodo') {
       item.metodo = value;
       const metodoConfig = METODOS_PAGO.find(m => m.id === value);
-      // Auto-assign remaining USD if current amount is 0
-      if (!item.monto_usd || item.monto_usd === 0) {
-        const otherPayments = updated
-          .filter((_, i) => i !== index)
-          .reduce((sum, mp) => sum + parseFloat(mp.monto_usd || 0), 0);
-        const pend = Math.max(0, parseFloat((totalUSD - otherPayments).toFixed(2)));
+      const otherPayments = updated
+        .filter((_, i) => i !== index)
+        .reduce((sum, mp) => sum + parseFloat(mp.monto_usd || 0), 0);
+      const pend = Math.max(0, parseFloat((totalUSD - otherPayments).toFixed(2)));
+
+      if (metodoConfig?.isCashea) {
+        // Default initial is 40% of remaining balance, or 0 if pend is 0
+        item.monto_usd = parseFloat((pend * 0.40).toFixed(2));
+      } else if (!item.monto_usd || item.monto_usd === 0) {
         item.monto_usd = pend;
       }
+
       if (metodoConfig?.enBs && tasa > 0) {
         item.monto_bs = parseFloat((item.monto_usd * tasa).toFixed(2));
       } else {
@@ -262,13 +269,16 @@ export default function POS() {
     setMetodosPago(metodosPago.filter((_, i) => i !== index));
   }
 
-  // Si hay Cashea, calculamos el total cubierto considerando la inicial pagada en tienda + el crédito asumido por Cashea
+  // Cashea payment breakdown calculations
   const tieneCashea = metodosPago.some(mp => mp.metodo === 'cashea');
-  const totalPagado = metodosPago.reduce((sum, mp) => sum + parseFloat(mp.monto_usd || 0), 0);
-  // Si usa Cashea, la inicial es lo que paga el cliente hoy, y el crédito Cashea cubre el resto de la factura
   const casheaItem = metodosPago.find(mp => mp.metodo === 'cashea');
-  const casheaCreditoUSD = (tieneCashea && casheaItem) ? Math.max(0, parseFloat((totalUSD - totalPagado).toFixed(2))) : 0;
-  const restante = tieneCashea ? 0 : Math.max(0, parseFloat((totalUSD - totalPagado).toFixed(2)));
+  const otrosPagos = metodosPago.filter(mp => mp.metodo !== 'cashea').reduce((sum, mp) => sum + parseFloat(mp.monto_usd || 0), 0);
+  const casheaInicial = tieneCashea ? parseFloat(casheaItem?.monto_usd || 0) : 0;
+  const totalPagadoEnTienda = otrosPagos + casheaInicial;
+  const casheaCreditoUSD = tieneCashea ? Math.max(0, parseFloat((totalUSD - totalPagadoEnTienda).toFixed(2))) : 0;
+  const restante = tieneCashea
+    ? (casheaInicial <= 0 ? Math.max(0, parseFloat((totalUSD - otrosPagos).toFixed(2))) : 0)
+    : Math.max(0, parseFloat((totalUSD - totalPagadoEnTienda).toFixed(2)));
 
   // Emit invoice
   async function emitirFactura() {
@@ -299,18 +309,46 @@ export default function POS() {
 
       // Prepare payment methods for storage
       const tasa = parseFloat(tasaHoy.tasa_usd_bs);
-      const metodosStorage = metodosPago.map(mp => {
+      const desgloseInicial = tieneCashea ? metodosPago.map(mp => {
         if (mp.metodo === 'cashea') {
-          const inicialUSD = parseFloat(mp.monto_usd || 0);
+          const metodoInicialConfig = METODOS_INICIAL_CASHEA.find(m => m.id === mp.cashea_metodo_inicial);
+          const montoUSD = parseFloat(mp.monto_usd || 0);
+          const montoBs = mp.monto_bs ? parseFloat(mp.monto_bs) : (tasa > 0 ? parseFloat((montoUSD * tasa).toFixed(2)) : 0);
+          return {
+            metodo: metodoInicialConfig?.label || 'Punto de Venta',
+            metodo_id: mp.cashea_metodo_inicial || 'punto_venta',
+            monto_usd: montoUSD,
+            monto_bs: montoBs,
+            referencia: mp.cashea_referencia_inicial || '',
+          };
+        }
+        const montoUSD = parseFloat(mp.monto_usd || 0);
+        const montoBs = mp.monto_bs ? parseFloat(mp.monto_bs) : (tasa > 0 ? parseFloat((montoUSD * tasa).toFixed(2)) : 0);
+        return {
+          metodo: METODOS_PAGO.find(m => m.id === mp.metodo)?.label || mp.metodo,
+          metodo_id: mp.metodo,
+          monto_usd: montoUSD,
+          monto_bs: montoBs,
+          referencia: mp.referencia || '',
+          titular: mp.zelle_titular || '',
+        };
+      }) : [];
+
+      const metodosStorage = metodosPago.map(mp => {
+        const montoUSD = parseFloat(mp.monto_usd || 0);
+        const montoBs = mp.monto_bs ? parseFloat(mp.monto_bs) : (tasa > 0 ? parseFloat((montoUSD * tasa).toFixed(2)) : 0);
+
+        if (mp.metodo === 'cashea') {
+          const inicialUSD = totalPagadoEnTienda;
           const inicialBs = parseFloat((inicialUSD * tasa).toFixed(2));
-          const creditoUSD = parseFloat((totalUSD - totalPagado).toFixed(2));
+          const creditoUSD = Math.max(0, parseFloat((totalUSD - totalPagadoEnTienda).toFixed(2)));
           const creditoBs = parseFloat((creditoUSD * tasa).toFixed(2));
           const metodoInicialConfig = METODOS_INICIAL_CASHEA.find(m => m.id === mp.cashea_metodo_inicial);
           return {
             metodo: 'Cashea',
             metodo_id: 'cashea',
-            monto_usd: inicialUSD,
-            monto_bs: inicialBs,
+            monto_usd: montoUSD,
+            monto_bs: montoBs,
             inicial_usd: inicialUSD,
             inicial_bs: inicialBs,
             cashea_metodo_inicial: mp.cashea_metodo_inicial || 'punto_venta',
@@ -319,13 +357,14 @@ export default function POS() {
             credito_cashea_usd: creditoUSD,
             credito_cashea_bs: creditoBs,
             referencia: mp.referencia || '',
+            desglose_inicial: desgloseInicial,
           };
         }
         return {
           metodo: METODOS_PAGO.find(m => m.id === mp.metodo)?.label || mp.metodo,
           metodo_id: mp.metodo,
-          monto_usd: parseFloat(mp.monto_usd || 0),
-          ...(mp.monto_bs > 0 && { monto_bs: parseFloat(mp.monto_bs) }),
+          monto_usd: montoUSD,
+          monto_bs: montoBs,
           ...(mp.referencia && { referencia: mp.referencia }),
           ...(mp.zelle_titular && { zelle_titular: mp.zelle_titular }),
           ...(mp.zelle_email && { zelle_email: mp.zelle_email }),
@@ -698,7 +737,9 @@ export default function POS() {
                         <>
                           <div className="pos-payment-method__amounts">
                             <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                              <label style={{ fontSize: '0.75rem' }}>Monto ($ USD)</label>
+                              <label style={{ fontSize: '0.75rem', color: metodoConfig?.isCashea ? '#EC4899' : undefined, fontWeight: metodoConfig?.isCashea ? 'bold' : undefined }}>
+                                {metodoConfig?.isCashea ? 'Inicial Cashea ($ USD)' : 'Monto ($ USD)'}
+                              </label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -823,9 +864,15 @@ export default function POS() {
 
                 <div className="pos-payment-summary">
                   <div className="pos-totals__row">
-                    <span>Pagado</span>
-                    <span className="text-success">{formatUSD(totalPagado)}</span>
+                    <span>{tieneCashea ? 'Total Cobrado hoy en Tienda' : 'Pagado'}</span>
+                    <span className="text-success">{formatUSD(totalPagadoEnTienda)}</span>
                   </div>
+                  {tieneCashea && (
+                    <div className="pos-totals__row" style={{ color: '#EC4899', fontWeight: 'bold' }}>
+                      <span>Monto Financiado Cashea (Crédito)</span>
+                      <span>{formatUSD(casheaCreditoUSD)}</span>
+                    </div>
+                  )}
                   {restante > 0.01 && (
                     <div className="pos-totals__row">
                       <span>Restante</span>

@@ -7,6 +7,7 @@ import {
   HiOutlinePlus, HiOutlinePencilSquare, HiOutlineTrash,
   HiOutlineMagnifyingGlass, HiOutlineFunnel,
 } from 'react-icons/hi2';
+import ConfirmModal from '../components/common/ConfirmModal';
 
 export default function Inventario() {
   const [productos, setProductos] = useState([]);
@@ -18,10 +19,14 @@ export default function Inventario() {
   const [showModal, setShowModal] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
   const [editando, setEditando] = useState(null);
+  const [catEditando, setCatEditando] = useState(null);
   const [form, setForm] = useState({
     sku: '', nombre: '', descripcion: '', precio_usd: '', stock: '', stock_minimo: '5', categoria_id: '', activo: true
   });
   const [catForm, setCatForm] = useState({ nombre: '', descripcion: '' });
+  const [prodToDelete, setProdToDelete] = useState(null);
+  const [catToDelete, setCatToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
@@ -68,24 +73,70 @@ export default function Inventario() {
     }
   }
 
-  async function handleDelete(id) {
-    if (!confirm('¿Eliminar este producto?')) return;
-    const { error } = await supabase.from('productos').delete().eq('id', id);
-    if (error) toast.error(error.message);
-    else { toast.success('Producto eliminado'); loadData(); }
+  async function handleConfirmDeleteProduct() {
+    if (!prodToDelete) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from('productos').delete().eq('id', prodToDelete.id);
+      if (error) {
+        // Fallback defensivo a desactivación si tiene dependencias críticas
+        const { error: updateError } = await supabase.from('productos').update({ activo: false }).eq('id', prodToDelete.id);
+        if (updateError) throw updateError;
+        toast.success(`Producto marcado como INACTIVO debido a dependencias en base de datos.`);
+      } else {
+        toast.success(`Producto "${prodToDelete.nombre}" eliminado`);
+      }
+      setProdToDelete(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.message || 'Error al eliminar producto');
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handleCatSubmit(e) {
     e.preventDefault();
+    if (!catForm.nombre?.trim()) return;
     try {
-      const { error } = await supabase.from('categorias').insert(catForm);
-      if (error) throw error;
-      toast.success('Categoría creada');
-      setShowCatModal(false);
+      if (catEditando) {
+        const { error } = await supabase.from('categorias').update({
+          nombre: catForm.nombre,
+          descripcion: catForm.descripcion,
+        }).eq('id', catEditando.id);
+        if (error) throw error;
+        toast.success('Categoría actualizada');
+      } else {
+        const { error } = await supabase.from('categorias').insert(catForm);
+        if (error) throw error;
+        toast.success('Categoría creada');
+      }
+      setCatEditando(null);
       setCatForm({ nombre: '', descripcion: '' });
       loadData();
     } catch (error) {
-      toast.error(error.message);
+      toast.error(error.message || 'Error al guardar categoría');
+    }
+  }
+
+  async function handleConfirmDeleteCat() {
+    if (!catToDelete) return;
+    setDeleting(true);
+    try {
+      await supabase.from('productos').update({ categoria_id: null }).eq('categoria_id', catToDelete.id);
+      const { error } = await supabase.from('categorias').delete().eq('id', catToDelete.id);
+      if (error) throw error;
+      toast.success(`Categoría "${catToDelete.nombre}" eliminada`);
+      if (catEditando?.id === catToDelete.id) {
+        setCatEditando(null);
+        setCatForm({ nombre: '', descripcion: '' });
+      }
+      setCatToDelete(null);
+      loadData();
+    } catch (error) {
+      toast.error(error.message || 'Error al eliminar categoría');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -108,7 +159,9 @@ export default function Inventario() {
   }
 
   const productosFiltrados = productos.filter(p => {
-    const matchSearch = !search || p.nombre.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search ||
+      p.nombre.toLowerCase().includes(search.toLowerCase()) ||
+      p.sku.toLowerCase().includes(search.toLowerCase());
     const matchCat = !filtroCategoria || p.categoria_id === filtroCategoria;
     return matchSearch && matchCat;
   });
@@ -131,8 +184,8 @@ export default function Inventario() {
           <p className="page__subtitle">{productos.length} productos registrados</p>
         </div>
         <div className="page__actions">
-          <button className="btn btn--secondary" onClick={() => setShowCatModal(true)}>
-            <HiOutlinePlus /> Categoría
+          <button className="btn btn--secondary" onClick={() => { setCatEditando(null); setCatForm({ nombre: '', descripcion: '' }); setShowCatModal(true); }}>
+            <HiOutlinePlus /> Categorías
           </button>
           <button className="btn btn--primary" onClick={() => { setEditando(null); resetForm(); setShowModal(true); }}>
             <HiOutlinePlus /> Nuevo Producto
@@ -194,7 +247,7 @@ export default function Inventario() {
                       <button className="btn btn--ghost btn--xs" onClick={() => editarProducto(p)} title="Editar">
                         <HiOutlinePencilSquare />
                       </button>
-                      <button className="btn btn--ghost btn--xs text-danger" onClick={() => handleDelete(p.id)} title="Eliminar">
+                      <button className="btn btn--ghost btn--xs text-danger" onClick={() => setProdToDelete(p)} title="Eliminar Producto">
                         <HiOutlineTrash />
                       </button>
                     </div>
@@ -311,28 +364,128 @@ export default function Inventario() {
         </div>
       )}
 
-
-      {/* Category Modal */}
+      {/* Category Modal with Management */}
       {showCatModal && (
-        <div className="modal-overlay" onClick={() => setShowCatModal(false)}>
-          <div className="modal modal--sm" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => { setShowCatModal(false); setCatEditando(null); }}>
+          <div className="modal modal--md" onClick={e => e.stopPropagation()}>
             <div className="modal__header">
-              <h2>Nueva Categoría</h2>
+              <h2>Gestión de Categorías</h2>
+              <button className="modal__close" onClick={() => { setShowCatModal(false); setCatEditando(null); }}>×</button>
             </div>
-            <form onSubmit={handleCatSubmit} className="modal__form">
-              <div className="form-group">
-                <label>Nombre</label>
-                <input value={catForm.nombre} onChange={e => setCatForm({...catForm, nombre: e.target.value})} required />
-              </div>
-              <div className="form-group">
-                <label>Descripción</label>
-                <input value={catForm.descripcion} onChange={e => setCatForm({...catForm, descripcion: e.target.value})} />
-              </div>
-              <button type="submit" className="btn btn--primary btn--full">Crear Categoría</button>
-            </form>
+
+            <div className="modal__body">
+              {/* Form to create/edit */}
+              <form onSubmit={handleCatSubmit} style={{ marginBottom: '1.5rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ marginBottom: '0.5rem' }}>{catEditando ? 'Editar Categoría' : 'Nueva Categoría'}</h4>
+                <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                  <label>Nombre</label>
+                  <input
+                    value={catForm.nombre}
+                    onChange={e => setCatForm({...catForm, nombre: e.target.value})}
+                    placeholder="Ej. Audio y Sonido"
+                    required
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                  <label>Descripción</label>
+                  <input
+                    value={catForm.descripcion}
+                    onChange={e => setCatForm({...catForm, descripcion: e.target.value})}
+                    placeholder="Descripción de la categoría..."
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button type="submit" className="btn btn--primary btn--sm" style={{ flex: 1 }}>
+                    {catEditando ? 'Guardar Cambios' : 'Crear Categoría'}
+                  </button>
+                  {catEditando && (
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => { setCatEditando(null); setCatForm({ nombre: '', descripcion: '' }); }}
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              {/* Existing Categories List */}
+              <h4>Categorías Existentes ({categorias.length})</h4>
+              {categorias.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No hay categorías registradas.</p>
+              ) : (
+                <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.5rem' }}>
+                  {categorias.map(cat => (
+                    <div
+                      key={cat.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '0.5rem 0.75rem',
+                        background: 'rgba(255,255,255,0.02)',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)'
+                      }}
+                    >
+                      <div>
+                        <strong>{cat.nombre}</strong>
+                        {cat.descripcion && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{cat.descripcion}</div>}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        <button
+                          className="btn btn--ghost btn--xs"
+                          onClick={() => {
+                            setCatEditando(cat);
+                            setCatForm({ nombre: cat.nombre, descripcion: cat.descripcion || '' });
+                          }}
+                          title="Editar categoría"
+                        >
+                          <HiOutlinePencilSquare />
+                        </button>
+                        <button
+                          className="btn btn--ghost btn--xs text-danger"
+                          onClick={() => setCatToDelete(cat)}
+                          title="Eliminar categoría"
+                        >
+                          <HiOutlineTrash />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Product Deletion */}
+      <ConfirmModal
+        isOpen={!!prodToDelete}
+        title={`¿Eliminar el producto "${prodToDelete?.nombre}"?`}
+        message="Se eliminará el producto del catálogo. Si posee historial contable o ventas, el sistema lo desactivará de forma segura preservando la integridad de las facturas."
+        confirmText="Sí, Eliminar Producto"
+        cancelText="Cancelar"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDeleteProduct}
+        onCancel={() => !deleting && setProdToDelete(null)}
+      />
+
+      {/* Confirmation Modal for Category Deletion */}
+      <ConfirmModal
+        isOpen={!!catToDelete}
+        title={`¿Eliminar la categoría "${catToDelete?.nombre}"?`}
+        message="Los productos asociados a esta categoría no se borrarán, solo quedarán sin categoría asignada."
+        confirmText="Sí, Eliminar Categoría"
+        cancelText="Cancelar"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDeleteCat}
+        onCancel={() => !deleting && setCatToDelete(null)}
+      />
     </div>
   );
 }

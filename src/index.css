@@ -1604,32 +1604,19 @@ a:hover { color: var(--primary-hover); }
 }
 
 /* ============================================
-   PRINT MEDIA QUERIES
+   PRINT MEDIA QUERIES (TICKET TÉRMICO)
    ============================================ */
 @media print {
-  /* Ocultar elementos generales de la app */
-  .no-print,
-  .sidebar,
-  .sidebar-overlay,
-  .mobile-topbar,
-  .ticket-controls,
-  .app-layout > *:not(.ticket-overlay),
-  .page,
-  .pos-layout {
+  /* Si el ticket térmico modal está abierto y se imprime directo en ventana principal */
+  body:has(#ticket-container) .sidebar,
+  body:has(#ticket-container) .sidebar-overlay,
+  body:has(#ticket-container) .mobile-topbar,
+  body:has(#ticket-container) .app-layout__content,
+  body:has(#ticket-container) .ticket-controls {
     display: none !important;
   }
 
-  /* Cuando el ticket está abierto, ocultar todo lo que no sea el ticket */
-  body {
-    background: #ffffff !important;
-    color: #000000 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  .ticket-overlay {
+  body:has(#ticket-container) .ticket-overlay {
     position: static !important;
     display: block !important;
     background: transparent !important;
@@ -1641,11 +1628,7 @@ a:hover { color: var(--primary-hover); }
     z-index: auto !important;
   }
 
-  .ticket-controls {
-    display: none !important;
-  }
-
-  #ticket-container {
+  body:has(#ticket-container) #ticket-container {
     display: block !important;
     position: relative !important;
     margin: 0 auto !important;
@@ -1661,37 +1644,10 @@ a:hover { color: var(--primary-hover); }
     font-weight: bold !important;
   }
 
-  #ticket-container,
-  #ticket-container * {
+  body:has(#ticket-container) #ticket-container * {
     color: #000000 !important;
     background: transparent !important;
     font-weight: bold !important;
-  }
-
-  /* Full report print */
-  body:has(.reportes-page) .print-report-header {
-    display: block !important;
-    margin-bottom: 20px !important;
-  }
-
-  body:has(.reportes-page) .page {
-    padding: 0 !important;
-  }
-
-  body:has(.reportes-page) .card,
-  body:has(.reportes-page) .stat-card {
-    background: white !important;
-    color: black !important;
-    border: 1px solid #ddd !important;
-    box-shadow: none !important;
-    break-inside: avoid;
-  }
-
-  body:has(.reportes-page) .stat-card__value,
-  body:has(.reportes-page) .card__title,
-  body:has(.reportes-page) td,
-  body:has(.reportes-page) th {
-    color: black !important;
   }
 }
 
@@ -1760,6 +1716,291 @@ a:hover { color: var(--primary-hover); }
   
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+
+/* Hidden on screen by default */
+.print-report-header {
+  display: none;
+}
+
+/* ============================================
+   PRINT / PDF STYLES
+   ============================================ */
+@media print {
+  /* ── Reset general ── */
+  *, *::before, *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    transition: none !important;
+    animation: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+    font-family: 'Arial', 'Helvetica', sans-serif !important;
+    font-size: 11pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1.4 !important;
+  }
+
+  /* ── Ocultar elementos de navegación ── */
+  .no-print,
+  .sidebar,
+  .sidebar-overlay,
+  .app-layout__nav,
+  .nav-toggle,
+  .btn,
+  .modal-overlay,
+  .filters-bar,
+  .page__header,
+  [class*="no-print"],
+  .react-hot-toast {
+    display: none !important;
+  }
+
+  /* ── Layout de impresión ── */
+  .app-layout,
+  .app-layout__content {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: unset !important;
+  }
+
+  .page,
+  .reportes-page {
+    padding: 0.5cm 1cm !important;
+    background: #ffffff !important;
+    min-height: unset !important;
+    max-width: 100% !important;
+  }
+
+  /* ── Encabezado del reporte (visible solo al imprimir) ── */
+  .print-report-header {
+    display: block !important;
+    text-align: center;
+    border-bottom: 2px solid #000;
+    padding-bottom: 0.4cm;
+    margin-bottom: 0.5cm;
+  }
+
+  .print-report-header h2 {
+    font-size: 16pt !important;
+    font-weight: 900 !important;
+    margin: 0 0 2px !important;
+    color: #000 !important;
+    letter-spacing: 1px;
+  }
+
+  .print-report-header h3 {
+    font-size: 12pt !important;
+    font-weight: 600 !important;
+    margin: 2px 0 !important;
+    color: #333 !important;
+  }
+
+  .print-report-header p {
+    font-size: 9pt !important;
+    color: #555 !important;
+    margin: 4px 0 0 !important;
+  }
+
+  /* ── Tarjetas KPI ── */
+  .stats-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 0.3cm !important;
+    margin-bottom: 0.5cm !important;
+  }
+
+  .stat-card {
+    background: #f8f8f8 !important;
+    border: 1px solid #cccccc !important;
+    border-radius: 4px !important;
+    padding: 0.25cm 0.35cm !important;
+    break-inside: avoid;
+  }
+
+  .stat-card__icon {
+    display: none !important;
+  }
+
+  .stat-card__label {
+    font-size: 8pt !important;
+    color: #666 !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    display: block;
+  }
+
+  .stat-card__value {
+    font-size: 14pt !important;
+    font-weight: 900 !important;
+    color: #000 !important;
+    display: block;
+  }
+
+  .stat-card__sub {
+    font-size: 8pt !important;
+    color: #888 !important;
+    display: block;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: #ffffff !important;
+    border: 1px solid #cccccc !important;
+    border-radius: 4px !important;
+    padding: 0.3cm 0.4cm !important;
+    margin-bottom: 0.4cm !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .card__title {
+    font-size: 11pt !important;
+    font-weight: 700 !important;
+    color: #000 !important;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 0.15cm;
+    margin-bottom: 0.2cm !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.2cm !important;
+  }
+
+  /* ── Tablas ── */
+  .table-container {
+    overflow: visible !important;
+  }
+
+  .table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9pt !important;
+    margin: 0 !important;
+  }
+
+  .table thead tr {
+    background: #1a1a1a !important;
+    color: #ffffff !important;
+  }
+
+  .table th {
+    background: #1a1a1a !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    padding: 5px 6px !important;
+    border: 1px solid #333 !important;
+    font-size: 8.5pt !important;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .table td {
+    padding: 4px 6px !important;
+    border: 1px solid #dddddd !important;
+    color: #111111 !important;
+    background: #ffffff !important;
+  }
+
+  .table tbody tr:nth-child(even) td {
+    background: #f5f5f5 !important;
+  }
+
+  .table tbody tr.table__row--muted td {
+    color: #888 !important;
+    text-decoration: line-through;
+  }
+
+  .table tfoot td,
+  .table tfoot th {
+    background: #f0f0f0 !important;
+    color: #000 !important;
+    font-weight: 700 !important;
+    border: 1px solid #999 !important;
+  }
+
+  .table__empty {
+    text-align: center !important;
+    color: #888 !important;
+    padding: 8px !important;
+  }
+
+  /* ── Badges ── */
+  .badge {
+    padding: 1px 5px !important;
+    border-radius: 3px !important;
+    font-size: 8pt !important;
+    font-weight: 600 !important;
+    border: 1px solid currentColor !important;
+  }
+
+  .badge--success  { background: #dcfce7 !important; color: #166534 !important; }
+  .badge--danger   { background: #fee2e2 !important; color: #991b1b !important; }
+  .badge--warning  { background: #fef9c3 !important; color: #854d0e !important; }
+  .badge--primary  { background: #e0e7ff !important; color: #3730a3 !important; }
+  .badge--info     { background: #e0f2fe !important; color: #075985 !important; }
+  .badge--ghost    { background: #f3f4f6 !important; color: #374151 !important; }
+
+  /* ── Mini barras de porcentaje ── */
+  .print-bar-container {
+    display: inline-block;
+    width: 50px;
+    height: 5px;
+    background: #e5e5e5;
+    border-radius: 2px;
+    vertical-align: middle;
+  }
+
+  /* ── Métodos de pago ── */
+  .pos-totals__row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+    border-bottom: 1px dashed #e5e5e5;
+    font-size: 9pt !important;
+  }
+
+  /* ── Saltos de página ── */
+  .print-page-break {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* ── Paginación oculta en PDF ── */
+  .pagination,
+  [class*="pagination"] {
+    display: none !important;
+  }
+
+  /* ── Código en tablas ── */
+  code {
+    font-family: 'Courier New', monospace !important;
+    font-size: 8pt !important;
+    background: #f3f4f6 !important;
+    padding: 1px 3px !important;
+    border-radius: 2px !important;
+    color: #111 !important;
+  }
+
+  /* ── Pie de página ── */
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm 1.2cm;
   }
 }
 

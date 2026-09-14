@@ -94,6 +94,23 @@ export function AuthProvider({ children }) {
       setLoading(false);
       throw error;
     }
+
+    // Verify user is active in the public users table
+    if (data?.user?.id) {
+      const { data: profileData } = await supabase
+        .from('usuarios')
+        .select('activo, nombre_completo')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profileData && profileData.activo === false) {
+        // User is deactivated — sign out immediately
+        await supabase.auth.signOut();
+        setLoading(false);
+        throw new Error('Usuario desactivado. Contacte al administrador del sistema.');
+      }
+    }
+
     return data;
   }
 

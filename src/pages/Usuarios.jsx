@@ -4,7 +4,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatFecha } from '../utils/formatters';
 import toast from 'react-hot-toast';
 import Pagination from '../components/common/Pagination';
-import { HiOutlineUserPlus, HiOutlineLockClosed, HiOutlineLockOpen } from 'react-icons/hi2';
+import ConfirmModal from '../components/common/ConfirmModal';
+import {
+  HiOutlineUserPlus,
+  HiOutlineLockClosed,
+  HiOutlineLockOpen,
+  HiOutlineTrash,
+} from 'react-icons/hi2';
 
 export default function Usuarios() {
   const { createUser } = useAuth();
@@ -14,6 +20,10 @@ export default function Usuarios() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', nombre_completo: '', rol: 'vendedor' });
   const [creando, setCreando] = useState(false);
+
+  // Confirm modal state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [usuarioAEliminar, setUsuarioAEliminar] = useState(null);
 
   useEffect(() => { loadUsuarios(); }, []);
 
@@ -64,12 +74,39 @@ export default function Usuarios() {
     }
   }
 
+  function solicitarEliminacion(usuario) {
+    setUsuarioAEliminar(usuario);
+    setConfirmOpen(true);
+  }
+
+  async function confirmarEliminacion() {
+    if (!usuarioAEliminar) return;
+    try {
+      // Desactivar el usuario en la tabla pública
+      const { error } = await supabase
+        .from('usuarios')
+        .update({ activo: false, nombre_completo: `[ELIMINADO] ${usuarioAEliminar.nombre_completo}` })
+        .eq('id', usuarioAEliminar.id);
+      if (error) throw error;
+      toast.success(`Usuario "${usuarioAEliminar.nombre_completo}" eliminado`);
+      loadUsuarios();
+    } catch (error) {
+      toast.error('Error al eliminar usuario: ' + error.message);
+    } finally {
+      setConfirmOpen(false);
+      setUsuarioAEliminar(null);
+    }
+  }
+
   if (loading) return <div className="page-loading"><div className="loading-spinner" /><p>Cargando usuarios...</p></div>;
 
   return (
     <div className="page">
       <div className="page__header">
-        <h1 className="page__title">Gestión de Usuarios</h1>
+        <div>
+          <h1 className="page__title">Gestión de Usuarios</h1>
+          <p className="page__subtitle">{usuarios.length} usuario(s) registrado(s)</p>
+        </div>
         <button className="btn btn--primary" onClick={() => setShowModal(true)}>
           <HiOutlineUserPlus /> Nuevo Vendedor
         </button>
@@ -79,13 +116,20 @@ export default function Usuarios() {
         <div className="table-container">
           <table className="table">
             <thead>
-              <tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Registrado</th><th>Acciones</th></tr>
+              <tr>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Registrado</th>
+                <th>Acciones</th>
+              </tr>
             </thead>
             <tbody>
               {usuarios.slice((currentPage - 1) * 20, currentPage * 20).map(u => (
-                <tr key={u.id}>
-                  <td>{u.nombre_completo}</td>
-                  <td>{u.email}</td>
+                <tr key={u.id} className={!u.activo ? 'table__row--muted' : ''}>
+                  <td><strong>{u.nombre_completo}</strong></td>
+                  <td style={{ color: '#A3A3A3' }}>{u.email}</td>
                   <td>
                     <span className={`badge badge--${u.rol === 'admin' ? 'primary' : 'info'}`}>
                       {u.rol === 'admin' ? 'Admin' : 'Vendedor'}
@@ -96,20 +140,35 @@ export default function Usuarios() {
                       {u.activo ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>
-                  <td>{formatFecha(u.created_at)}</td>
+                  <td style={{ color: '#A3A3A3' }}>{formatFecha(u.created_at)}</td>
                   <td>
-                    {u.rol !== 'admin' && (
-                      <button
-                        className={`btn btn--ghost btn--xs ${u.activo ? 'text-danger' : 'text-success'}`}
-                        onClick={() => toggleActivo(u)}
-                        title={u.activo ? 'Desactivar' : 'Activar'}
-                      >
-                        {u.activo ? <HiOutlineLockClosed /> : <HiOutlineLockOpen />}
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      {u.rol !== 'admin' && (
+                        <>
+                          <button
+                            className={`btn btn--ghost btn--xs ${u.activo ? 'text-danger' : 'text-success'}`}
+                            onClick={() => toggleActivo(u)}
+                            title={u.activo ? 'Desactivar acceso' : 'Activar acceso'}
+                          >
+                            {u.activo ? <HiOutlineLockClosed /> : <HiOutlineLockOpen />}
+                          </button>
+                          <button
+                            className="btn btn--ghost btn--xs text-danger"
+                            onClick={() => solicitarEliminacion(u)}
+                            title="Eliminar usuario"
+                            style={{ color: '#EF4444' }}
+                          >
+                            <HiOutlineTrash />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
+              {usuarios.length === 0 && (
+                <tr><td colSpan="6" className="table__empty">No hay usuarios registrados</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -121,6 +180,7 @@ export default function Usuarios() {
         />
       </div>
 
+      {/* Modal crear usuario */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal modal--sm" onClick={e => e.stopPropagation()}>
@@ -152,6 +212,20 @@ export default function Usuarios() {
           </div>
         </div>
       )}
+
+      {/* Modal confirmar eliminación */}
+      <ConfirmModal
+        open={confirmOpen}
+        title="Eliminar Usuario"
+        message={
+          usuarioAEliminar
+            ? `¿Estás seguro de eliminar al usuario "${usuarioAEliminar.nombre_completo}"?\n\nSu cuenta quedará desactivada y no podrá acceder al sistema.`
+            : ''
+        }
+        confirmLabel="Sí, Eliminar"
+        onConfirm={confirmarEliminacion}
+        onCancel={() => { setConfirmOpen(false); setUsuarioAEliminar(null); }}
+      />
     </div>
   );
 }

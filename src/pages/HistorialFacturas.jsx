@@ -9,6 +9,8 @@ import {
   HiOutlineXCircle, HiOutlineFunnel,
 } from 'react-icons/hi2';
 
+import ConfirmModal from '../components/common/ConfirmModal';
+
 export default function HistorialFacturas() {
   const [facturas, setFacturas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +21,8 @@ export default function HistorialFacturas() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showDetalle, setShowDetalle] = useState(null);
   const [showTicket, setShowTicket] = useState(null);
+  const [facturaToAnular, setFacturaToAnular] = useState(null);
+  const [anulando, setAnulando] = useState(false);
 
   useEffect(() => { loadFacturas(); }, []);
 
@@ -46,19 +50,25 @@ export default function HistorialFacturas() {
     setShowDetalle({ ...factura, detalles: detalles || [] });
   }
 
-  async function anularFactura(factura) {
-    if (!confirm(`¿Anular la factura ${factura.numero_factura}? El stock será revertido.`)) return;
+  async function handleConfirmAnular() {
+    if (!facturaToAnular) return;
+    setAnulando(true);
     try {
       const { error } = await supabase
         .from('facturas')
         .update({ estado: 'anulada' })
-        .eq('id', factura.id);
+        .eq('id', facturaToAnular.id);
       if (error) throw error;
-      toast.success('Factura anulada');
-      loadFacturas();
-      setShowDetalle(null);
+      toast.success(`Factura ${facturaToAnular.numero_factura} anulada. El inventario ha sido revertido.`);
+      await loadFacturas();
+      if (showDetalle && showDetalle.id === facturaToAnular.id) {
+        setShowDetalle(prev => prev ? { ...prev, estado: 'anulada' } : null);
+      }
+      setFacturaToAnular(null);
     } catch (error) {
-      toast.error(error.message);
+      toast.error('Error al anular la factura: ' + error.message);
+    } finally {
+      setAnulando(false);
     }
   }
 
@@ -90,7 +100,11 @@ export default function HistorialFacturas() {
     const matchSearch = !search ||
       f.numero_factura.toLowerCase().includes(search.toLowerCase()) ||
       f.clientes?.nombre?.toLowerCase().includes(search.toLowerCase()) ||
-      f.usuarios?.nombre_completo?.toLowerCase().includes(search.toLowerCase());
+      f.usuarios?.nombre_completo?.toLowerCase().includes(search.toLowerCase()) ||
+      (f.metodos_pago || []).some(m =>
+        (m.metodo && m.metodo.toLowerCase().includes(search.toLowerCase())) ||
+        (m.referencia && m.referencia.toLowerCase().includes(search.toLowerCase()))
+      );
     const matchEstado = !filtroEstado || f.estado === filtroEstado;
     const matchDesde = !filtroFechaDesde || new Date(f.fecha_emision) >= new Date(filtroFechaDesde);
     const matchHasta = !filtroFechaHasta || new Date(f.fecha_emision) <= new Date(filtroFechaHasta + 'T23:59:59');
@@ -146,32 +160,42 @@ export default function HistorialFacturas() {
               </tr>
             </thead>
             <tbody>
-              {facturasPaginadas.map(f => (
-                <tr key={f.id} className={f.estado === 'anulada' ? 'table__row--muted' : ''}>
-                  <td><code>{f.numero_factura}</code></td>
-                  <td>{f.clientes?.nombre}</td>
-                  <td>{f.usuarios?.nombre_completo}</td>
-                  <td>{formatUSD(f.total_usd)}</td>
-                  <td>{formatBs(f.total_bs)}</td>
-                  <td>
-                    <span className={`badge badge--${f.estado === 'emitida' ? 'success' : 'danger'}`}>
-                      {f.estado.charAt(0).toUpperCase() + f.estado.slice(1)}
-                    </span>
-                  </td>
-                  <td>{formatFecha(f.fecha_emision, true)}</td>
-                  <td>
-                    <div className="table__actions">
-                      <button className="btn btn--ghost btn--xs" onClick={() => verDetalle(f)} title="Ver detalle"><HiOutlineEye /></button>
-                      {f.estado === 'emitida' && (
-                        <>
-                          <button className="btn btn--ghost btn--xs" onClick={() => imprimirFactura(f)} title="Imprimir Ticket"><HiOutlinePrinter /></button>
-                          <button className="btn btn--ghost btn--xs text-danger" onClick={() => anularFactura(f)} title="Anular"><HiOutlineXCircle /></button>
-                        </>
+              {facturasPaginadas.map(f => {
+                const hasCashea = (f.metodos_pago || []).some(mp => mp.metodo_id === 'cashea' || mp.metodo?.toLowerCase?.().includes('cashea'));
+                return (
+                  <tr key={f.id} className={f.estado === 'anulada' ? 'table__row--muted' : ''}>
+                    <td>
+                      <code>{f.numero_factura}</code>
+                      {hasCashea && (
+                        <span className="badge" style={{ marginLeft: '6px', fontSize: '0.65rem', background: 'rgba(236, 72, 153, 0.15)', color: '#EC4899', border: '1px solid rgba(236, 72, 153, 0.35)', verticalAlign: 'middle', fontWeight: 600 }}>
+                          Cashea
+                        </span>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td>{f.clientes?.nombre}</td>
+                    <td>{f.usuarios?.nombre_completo}</td>
+                    <td>{formatUSD(f.total_usd)}</td>
+                    <td>{formatBs(f.total_bs)}</td>
+                    <td>
+                      <span className={`badge badge--${f.estado === 'emitida' ? 'success' : 'danger'}`}>
+                        {f.estado.charAt(0).toUpperCase() + f.estado.slice(1)}
+                      </span>
+                    </td>
+                    <td>{formatFecha(f.fecha_emision, true)}</td>
+                    <td>
+                      <div className="table__actions">
+                        <button className="btn btn--ghost btn--xs" onClick={() => verDetalle(f)} title="Ver detalle"><HiOutlineEye /></button>
+                        {f.estado === 'emitida' && (
+                          <>
+                            <button className="btn btn--ghost btn--xs" onClick={() => imprimirFactura(f)} title="Imprimir Ticket"><HiOutlinePrinter /></button>
+                            <button className="btn btn--ghost btn--xs text-danger" onClick={() => setFacturaToAnular(f)} title="Anular Factura"><HiOutlineXCircle /></button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {facturasFiltradas.length === 0 && <tr><td colSpan="8" className="table__empty">No se encontraron facturas</td></tr>}
             </tbody>
           </table>
@@ -223,25 +247,188 @@ export default function HistorialFacturas() {
               </div>
 
               <h4 style={{ marginTop: '1rem' }}>Métodos de Pago</h4>
-              {(showDetalle.metodos_pago || []).map((mp, i) => {
-                const extraInfo = [];
-                if (mp.metodo_id === 'cashea' && (mp.cashea_metodo_inicial_label || mp.cashea_metodo_inicial)) {
-                  extraInfo.push(`Inicial vía: ${mp.cashea_metodo_inicial_label || mp.cashea_metodo_inicial}`);
-                  if (mp.cashea_referencia_inicial) extraInfo.push(`Ref Inicial: ${mp.cashea_referencia_inicial}`);
+              {(() => {
+                const esMetodoEnBs = (mp) => {
+                  if (!mp) return false;
+                  const id = (mp.metodo_id || mp.id || '').toLowerCase();
+                  const nombre = (mp.metodo || mp.label || '').toLowerCase();
+                  return (
+                    id === 'punto_venta' ||
+                    id === 'pago_movil' ||
+                    id === 'efectivo_bs' ||
+                    id === 'transferencia' ||
+                    nombre.includes('punto') ||
+                    nombre.includes('pago móvil') ||
+                    nombre.includes('pago movil') ||
+                    nombre.includes('efectivo bs') ||
+                    nombre.includes('transferencia') ||
+                    nombre.includes('bolívares') ||
+                    nombre.includes('bolivares') ||
+                    mp.enBs === true
+                  );
+                };
+
+                const metodosPago = showDetalle.metodos_pago || [];
+                const casheaItem = metodosPago.find(mp => mp.metodo_id === 'cashea' || mp.metodo?.toLowerCase?.().includes('cashea'));
+                const tasaValor = showDetalle.tasas_cambio?.tasa_usd_bs || (showDetalle.total_usd > 0 ? (showDetalle.total_bs / showDetalle.total_usd) : 0);
+
+                if (casheaItem) {
+                  const otrosMetodos = metodosPago.filter(mp => mp !== casheaItem);
+                  
+                  let desgloseInicial = [];
+                  if (Array.isArray(casheaItem.desglose_inicial) && casheaItem.desglose_inicial.length > 0) {
+                    desgloseInicial = casheaItem.desglose_inicial;
+                  } else {
+                    const casheaPropio = parseFloat(casheaItem.inicial_usd ?? casheaItem.monto_usd ?? 0);
+                    if (casheaPropio > 0 || otrosMetodos.length === 0) {
+                      desgloseInicial.push({
+                        metodo: casheaItem.cashea_metodo_inicial_label || casheaItem.cashea_metodo_inicial || 'Punto de Venta',
+                        metodo_id: casheaItem.cashea_metodo_inicial || 'punto_venta',
+                        monto_usd: casheaPropio,
+                        monto_bs: casheaItem.inicial_bs || (tasaValor > 0 ? parseFloat((casheaPropio * tasaValor).toFixed(2)) : 0),
+                        referencia: casheaItem.cashea_referencia_inicial,
+                      });
+                    }
+                    otrosMetodos.forEach(om => {
+                      const omUSD = parseFloat(om.monto_usd || 0);
+                      desgloseInicial.push({
+                        metodo: om.metodo,
+                        metodo_id: om.metodo_id,
+                        monto_usd: omUSD,
+                        monto_bs: om.monto_bs || (tasaValor > 0 ? parseFloat((omUSD * tasaValor).toFixed(2)) : 0),
+                        referencia: om.referencia,
+                        titular: om.zelle_titular,
+                      });
+                    });
+                  }
+
+                  const totalInicialUSD = desgloseInicial.reduce((s, d) => s + (parseFloat(d.monto_usd) || 0), 0);
+                  const totalInicialBs = tasaValor > 0 ? parseFloat((totalInicialUSD * tasaValor).toFixed(2)) : 0;
+
+                  let debiendoUSD = 0;
+                  if (casheaItem.credito_cashea_usd !== undefined && casheaItem.credito_cashea_usd !== null && !isNaN(Number(casheaItem.credito_cashea_usd))) {
+                    debiendoUSD = parseFloat(casheaItem.credito_cashea_usd);
+                  } else {
+                    debiendoUSD = Math.max(0, parseFloat(((parseFloat(showDetalle.total_usd) || 0) - totalInicialUSD).toFixed(2)));
+                  }
+
+                  let debiendoBs = 0;
+                  if (casheaItem.credito_cashea_bs !== undefined && casheaItem.credito_cashea_bs !== null && !isNaN(Number(casheaItem.credito_cashea_bs)) && Number(casheaItem.credito_cashea_bs) > 0) {
+                    debiendoBs = parseFloat(casheaItem.credito_cashea_bs);
+                  } else if (tasaValor > 0 && debiendoUSD > 0) {
+                    debiendoBs = parseFloat((debiendoUSD * tasaValor).toFixed(2));
+                  }
+
+                  return (
+                    <div
+                      style={{
+                        margin: '0.75rem 0',
+                        padding: '0.85rem',
+                        background: 'rgba(236, 72, 153, 0.07)',
+                        border: '1px solid rgba(236, 72, 153, 0.35)',
+                        borderRadius: '8px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                        <span style={{ fontWeight: 'bold', color: '#EC4899', fontSize: '0.95rem' }}>
+                          Pago Financiado Cashea
+                        </span>
+                        {casheaItem.referencia && (
+                          <span className="badge" style={{ background: '#EC4899', color: '#fff', fontSize: '0.75rem' }}>
+                            N° Orden Cashea: {casheaItem.referencia}
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.6rem' }}>
+                        {/* Tarjeta Inicial */}
+                        <div style={{ background: 'rgba(0, 0, 0, 0.25)', padding: '0.65rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                          <div style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Inicial Pagada (en Tienda)
+                          </div>
+                          <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#10B981', marginTop: '2px' }}>
+                            {formatUSD(totalInicialUSD)}
+                          </div>
+                          {totalInicialBs > 0 && (
+                            <div style={{ fontSize: '0.75rem', color: '#aaa' }}>
+                              Ref. {formatBs(totalInicialBs)}
+                            </div>
+                          )}
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.4rem' }}>
+                            <strong style={{ color: '#ddd' }}>Métodos de la Inicial:</strong>
+                            {desgloseInicial.map((di, idx) => {
+                              const diUSD = parseFloat(di.monto_usd || 0);
+                              const diBs = di.monto_bs !== undefined && di.monto_bs !== null && Number(di.monto_bs) > 0
+                                ? Number(di.monto_bs)
+                                : (tasaValor > 0 ? diUSD * tasaValor : 0);
+                              const isBs = esMetodoEnBs(di);
+
+                              return (
+                                <div key={idx} style={{ color: '#ccc', marginTop: '2px' }}>
+                                  • <strong>{di.metodo}:</strong> {isBs ? `${formatBs(diBs)} (Ref. ${formatUSD(diUSD)})` : `${formatUSD(diUSD)}`}
+                                  {di.referencia ? ` (N° Op: ${di.referencia})` : ''}
+                                  {di.titular ? ` (Emisor: ${di.titular})` : ''}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Tarjeta Monto Financiado Cashea */}
+                        <div style={{ background: 'rgba(236, 72, 153, 0.1)', padding: '0.65rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(236, 72, 153, 0.3)' }}>
+                          <div style={{ fontSize: '0.72rem', color: '#EC4899', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Monto Financiado Cashea
+                          </div>
+                          <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#EC4899', marginTop: '2px' }}>
+                            {formatUSD(debiendoUSD)}
+                          </div>
+                          {debiendoBs > 0 && (
+                            <div style={{ fontSize: '0.75rem', color: '#aaa' }}>
+                              Ref. {formatBs(debiendoBs)}
+                            </div>
+                          )}
+                          <div style={{ marginTop: '0.4rem', fontSize: '0.72rem', color: '#aaa', fontStyle: 'italic' }}>
+                            * Saldo por pagar en cuotas mediante App Cashea
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
                 }
-                if (mp.zelle_titular) extraInfo.push(`Emisor: ${mp.zelle_titular}`);
-                if (mp.zelle_email) extraInfo.push(`Correo: ${mp.zelle_email}`);
-                if (mp.referencia) extraInfo.push(mp.metodo_id === 'cashea' ? `Orden: ${mp.referencia}` : `Ref: ${mp.referencia}`);
-                if (mp.metodo_id === 'cashea' && mp.credito_cashea_usd > 0) {
-                  extraInfo.push(`Crédito Cashea: $${mp.credito_cashea_usd}`);
-                }
-                return (
-                  <div key={i} className="pos-totals__row">
-                    <span>{mp.metodo} {extraInfo.length > 0 ? `(${extraInfo.join(' | ')})` : ''}</span>
-                    <span>{formatUSD(mp.monto_usd)}</span>
-                  </div>
-                );
-              })}
+
+                return metodosPago.map((mp, i) => {
+                  const extraInfo = [];
+                  if (mp.zelle_titular) extraInfo.push(`Emisor: ${mp.zelle_titular}`);
+                  if (mp.zelle_email) extraInfo.push(`Correo: ${mp.zelle_email}`);
+                  if (mp.referencia) extraInfo.push(`N° Op: ${mp.referencia}`);
+
+                  const montoUSD = parseFloat(mp.monto_usd || 0);
+                  const montoBs = mp.monto_bs !== undefined && mp.monto_bs !== null && Number(mp.monto_bs) > 0
+                    ? Number(mp.monto_bs)
+                    : (tasaValor > 0 ? (montoUSD * tasaValor) : 0);
+                  const isBs = esMetodoEnBs(mp);
+
+                  if (isBs) {
+                    return (
+                      <div key={i} className="pos-totals__row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{mp.metodo} {extraInfo.length > 0 ? `(${extraInfo.join(' | ')})` : ''}</span>
+                        <span style={{ fontWeight: 'bold' }}>
+                          {formatBs(montoBs)} <small style={{ color: '#aaa', fontWeight: 'normal' }}>(Ref. {formatUSD(montoUSD)})</small>
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={i} className="pos-totals__row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{mp.metodo} {extraInfo.length > 0 ? `(${extraInfo.join(' | ')})` : ''}</span>
+                      <span style={{ fontWeight: 'bold' }}>
+                        {formatUSD(montoUSD)} {montoBs > 0 ? <small style={{ color: '#aaa', fontWeight: 'normal' }}>(Ref. {formatBs(montoBs)})</small> : ''}
+                      </span>
+                    </div>
+                  );
+                });
+              })()}
 
               <div className="pos-payment-actions" style={{ marginTop: '1.5rem' }}>
                 {showDetalle.estado === 'emitida' && (
@@ -249,7 +436,7 @@ export default function HistorialFacturas() {
                     <button className="btn btn--primary" onClick={() => imprimirFactura(showDetalle)}>
                       <HiOutlinePrinter /> Imprimir Ticket
                     </button>
-                    <button className="btn btn--ghost text-danger" onClick={() => anularFactura(showDetalle)}>
+                    <button className="btn btn--ghost text-danger" onClick={() => setFacturaToAnular(showDetalle)}>
                       <HiOutlineXCircle /> Anular Factura
                     </button>
                   </>
@@ -260,6 +447,19 @@ export default function HistorialFacturas() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Voiding Invoices */}
+      <ConfirmModal
+        isOpen={!!facturaToAnular}
+        title={`¿Anular Factura ${facturaToAnular?.numero_factura}?`}
+        message="El estado de la factura pasará a ANULADA y el stock de todos los productos incluidos será devuelto automáticamente al inventario. Esta acción es irreversible."
+        confirmText="Sí, Anular Factura"
+        cancelText="Volver"
+        variant="danger"
+        loading={anulando}
+        onConfirm={handleConfirmAnular}
+        onCancel={() => !anulando && setFacturaToAnular(null)}
+      />
     </div>
   );
 }

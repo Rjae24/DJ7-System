@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase';
 import { formatFecha } from '../utils/formatters';
 import toast from 'react-hot-toast';
 import Pagination from '../components/common/Pagination';
-import { HiOutlinePlus, HiOutlinePencilSquare, HiOutlineMagnifyingGlass } from 'react-icons/hi2';
+import ConfirmModal from '../components/common/ConfirmModal';
+import { HiOutlinePlus, HiOutlinePencilSquare, HiOutlineMagnifyingGlass, HiOutlineTrash } from 'react-icons/hi2';
 
 export default function Proveedores() {
   const [proveedores, setProveedores] = useState([]);
@@ -13,6 +14,8 @@ export default function Proveedores() {
   const [showModal, setShowModal] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ nombre: '', rif: '', telefono: '', email: '', direccion: '', contacto_nombre: '', activo: true });
+  const [provToDelete, setProvToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { loadProveedores(); }, []);
 
@@ -41,6 +44,23 @@ export default function Proveedores() {
       loadProveedores();
     } catch (error) {
       toast.error(error.message);
+    }
+  }
+
+  async function handleConfirmDeleteProveedor() {
+    if (!provToDelete) return;
+    setDeleting(true);
+    try {
+      await supabase.from('ordenes_compra').update({ proveedor_id: null }).eq('proveedor_id', provToDelete.id);
+      const { error } = await supabase.from('proveedores').delete().eq('id', provToDelete.id);
+      if (error) throw error;
+      toast.success(`Proveedor "${provToDelete.nombre}" eliminado`);
+      setProvToDelete(null);
+      loadProveedores();
+    } catch (err) {
+      toast.error(err.message || 'Error al eliminar proveedor');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -97,7 +117,12 @@ export default function Proveedores() {
                   <td>{p.telefono || '—'}</td>
                   <td>{p.contacto_nombre || '—'}</td>
                   <td><span className={`badge ${p.activo ? 'badge--success' : 'badge--ghost'}`}>{p.activo ? 'Activo' : 'Inactivo'}</span></td>
-                  <td><button className="btn btn--ghost btn--xs" onClick={() => editarProveedor(p)}><HiOutlinePencilSquare /></button></td>
+                  <td>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      <button className="btn btn--ghost btn--xs" onClick={() => editarProveedor(p)} title="Editar"><HiOutlinePencilSquare /></button>
+                      <button className="btn btn--ghost btn--xs text-danger" onClick={() => setProvToDelete(p)} title="Eliminar Proveedor"><HiOutlineTrash /></button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {filtrados.length === 0 && <tr><td colSpan="6" className="table__empty">No se encontraron proveedores</td></tr>}
@@ -137,6 +162,19 @@ export default function Proveedores() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Supplier Deletion */}
+      <ConfirmModal
+        isOpen={!!provToDelete}
+        title={`¿Eliminar al proveedor "${provToDelete?.nombre}"?`}
+        message="Las órdenes de compra históricas registradas con este proveedor se conservarán como registro de compras, desvinculando la referencia al proveedor."
+        confirmText="Sí, Eliminar Proveedor"
+        cancelText="Cancelar"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDeleteProveedor}
+        onCancel={() => !deleting && setProvToDelete(null)}
+      />
     </div>
   );
 }
