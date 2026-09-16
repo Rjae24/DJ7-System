@@ -371,7 +371,6 @@ export default function TicketFactura({ factura, onClose }) {
 
         {/* Payment Methods */}
         <div className="ticket__payments">
-          <div className="ticket__section-title">PAGOS:</div>
           {(() => {
             const esMetodoEnBs = (mp) => {
               if (!mp) return false;
@@ -436,13 +435,6 @@ export default function TicketFactura({ factura, onClose }) {
                 debiendoUSD = Math.max(0, parseFloat(((parseFloat(factura.total_usd) || 0) - totalInicialUSD).toFixed(2)));
               }
 
-              let debiendoBs = 0;
-              if (casheaItem.credito_cashea_bs !== undefined && casheaItem.credito_cashea_bs !== null && !isNaN(Number(casheaItem.credito_cashea_bs)) && Number(casheaItem.credito_cashea_bs) > 0) {
-                debiendoBs = parseFloat(casheaItem.credito_cashea_bs);
-              } else if (tasaNum > 0 && debiendoUSD > 0) {
-                debiendoBs = parseFloat((debiendoUSD * tasaNum).toFixed(2));
-              }
-
               return (
                 <div className="ticket__payment-item ticket__cashea-box" style={{ border: '1px dashed #000', padding: '4px 6px', margin: '5px 0' }}>
                   <div className="ticket__cashea-title" style={{ fontWeight: 'bold', fontSize: '11px', textTransform: 'uppercase', borderBottom: '1px solid #000', paddingBottom: '2px', marginBottom: '4px' }}>
@@ -493,11 +485,6 @@ export default function TicketFactura({ factura, onClose }) {
                     <span>Monto Financiado Cashea:</span>
                     <span>{formatUSD(debiendoUSD)}</span>
                   </div>
-                  {debiendoBs > 0 && (
-                    <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
-                      Ref. Financiado: {formatBs(debiendoBs)}
-                    </div>
-                  )}
                   <div className="ticket__cashea-note" style={{ fontSize: '9px', fontStyle: 'italic', marginTop: '2px', color: '#000' }}>
                     * Cuotas a pagar por el cliente a través de Cashea
                   </div>
@@ -506,57 +493,62 @@ export default function TicketFactura({ factura, onClose }) {
             }
 
             // Regular payment methods if not a Cashea sale
-            return metodosPago.map((mp, i) => {
-              const montoUSD = parseFloat(mp.monto_usd || 0);
-              const montoBs = mp.monto_bs !== undefined && mp.monto_bs !== null && Number(mp.monto_bs) > 0
-                ? Number(mp.monto_bs)
-                : (tasaNum > 0 ? (montoUSD * tasaNum) : 0);
-              const isBs = esMetodoEnBs(mp);
+            return (
+              <>
+                <div className="ticket__section-title">PAGOS:</div>
+                {metodosPago.map((mp, i) => {
+                  const montoUSD = parseFloat(mp.monto_usd || 0);
+                  const montoBs = mp.monto_bs !== undefined && mp.monto_bs !== null && Number(mp.monto_bs) > 0
+                    ? Number(mp.monto_bs)
+                    : (tasaNum > 0 ? (montoUSD * tasaNum) : 0);
+                  const isBs = esMetodoEnBs(mp);
 
-              if (isBs) {
-                return (
-                  <div key={i} className="ticket__payment-item">
-                    <div className="ticket__row">
-                      <span>{mp.metodo}:</span>
-                      <span>{formatBs(montoBs)}</span>
-                    </div>
-                    <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
-                      Ref. {formatUSD(montoUSD)}
-                    </div>
-                    {mp.referencia && (
-                      <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
-                        N° Op: {mp.referencia}
+                  if (isBs) {
+                    return (
+                      <div key={i} className="ticket__payment-item">
+                        <div className="ticket__row">
+                          <span>{mp.metodo}:</span>
+                          <span>{formatBs(montoBs)}</span>
+                        </div>
+                        <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
+                          Ref. {formatUSD(montoUSD)}
+                        </div>
+                        {mp.referencia && (
+                          <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
+                            N° Op: {mp.referencia}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              }
+                    );
+                  }
 
-              return (
-                <div key={i} className="ticket__payment-item">
-                  <div className="ticket__row">
-                    <span>{mp.metodo}:</span>
-                    <span>{formatUSD(montoUSD)}</span>
-                  </div>
-                  {montoBs > 0 && (
-                    <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
-                      Ref. {formatBs(montoBs)}
+                  return (
+                    <div key={i} className="ticket__payment-item">
+                      <div className="ticket__row">
+                        <span>{mp.metodo}:</span>
+                        <span>{formatUSD(montoUSD)}</span>
+                      </div>
+                      {montoBs > 0 && (
+                        <div className="ticket__ref" style={{ color: '#000', fontWeight: 'bold' }}>
+                          Ref. {formatBs(montoBs)}
+                        </div>
+                      )}
+                      {mp.zelle_titular && (
+                        <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Emisor: {mp.zelle_titular}</div>
+                      )}
+                      {mp.zelle_email && (
+                        <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Correo: {mp.zelle_email}</div>
+                      )}
+                      {mp.referencia && (
+                        <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
+                          N° Op: {mp.referencia}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {mp.zelle_titular && (
-                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Emisor: {mp.zelle_titular}</div>
-                  )}
-                  {mp.zelle_email && (
-                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>Correo: {mp.zelle_email}</div>
-                  )}
-                  {mp.referencia && (
-                    <div className="ticket__ref" style={{ fontWeight: 'bold', color: '#000' }}>
-                      N° Op: {mp.referencia}
-                    </div>
-                  )}
-                </div>
-              );
-            });
+                  );
+                })}
+              </>
+            );
           })()}
         </div>
 

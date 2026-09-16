@@ -5,9 +5,10 @@ import toast from 'react-hot-toast';
 import Pagination from '../components/common/Pagination';
 import {
   HiOutlinePlus, HiOutlinePencilSquare, HiOutlineTrash,
-  HiOutlineMagnifyingGlass, HiOutlineFunnel,
+  HiOutlineMagnifyingGlass, HiOutlineFunnel, HiOutlineTag,
 } from 'react-icons/hi2';
 import ConfirmModal from '../components/common/ConfirmModal';
+import ModalImprimirEtiquetas from '../components/print/ModalImprimirEtiquetas';
 
 export default function Inventario() {
   const [productos, setProductos] = useState([]);
@@ -18,6 +19,8 @@ export default function Inventario() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
+  const [showEtiquetasModal, setShowEtiquetasModal] = useState(false);
+  const [productoParaEtiqueta, setProductoParaEtiqueta] = useState(null);
   const [editando, setEditando] = useState(null);
   const [catEditando, setCatEditando] = useState(null);
   const [form, setForm] = useState({
@@ -158,6 +161,11 @@ export default function Inventario() {
     });
   }
 
+  function abrirModalEtiquetas(producto = null) {
+    setProductoParaEtiqueta(producto);
+    setShowEtiquetasModal(true);
+  }
+
   const productosFiltrados = productos.filter(p => {
     const matchSearch = !search ||
       p.nombre.toLowerCase().includes(search.toLowerCase()) ||
@@ -184,6 +192,9 @@ export default function Inventario() {
           <p className="page__subtitle">{productos.length} productos registrados</p>
         </div>
         <div className="page__actions">
+          <button className="btn btn--secondary" onClick={() => abrirModalEtiquetas(null)}>
+            <HiOutlineTag /> Imprimir Etiquetas
+          </button>
           <button className="btn btn--secondary" onClick={() => { setCatEditando(null); setCatForm({ nombre: '', descripcion: '' }); setShowCatModal(true); }}>
             <HiOutlinePlus /> Categorías
           </button>
@@ -244,6 +255,13 @@ export default function Inventario() {
                   </td>
                   <td>
                     <div className="table__actions">
+                      <button
+                        className="btn btn--ghost btn--xs"
+                        onClick={() => abrirModalEtiquetas(p)}
+                        title="Imprimir Código de Barras"
+                      >
+                        <HiOutlineTag />
+                      </button>
                       <button className="btn btn--ghost btn--xs" onClick={() => editarProducto(p)} title="Editar">
                         <HiOutlinePencilSquare />
                       </button>
@@ -486,6 +504,18 @@ export default function Inventario() {
         onConfirm={handleConfirmDeleteCat}
         onCancel={() => !deleting && setCatToDelete(null)}
       />
+
+      {/* Modal para Imprimir Etiquetas de Código de Barras */}
+      {showEtiquetasModal && (
+        <ModalImprimirEtiquetas
+          productos={productos}
+          productoInicial={productoParaEtiqueta}
+          onClose={() => {
+            setShowEtiquetasModal(false);
+            setProductoParaEtiqueta(null);
+          }}
+        />
+      )}
     </div>
   );
 }
