@@ -1223,23 +1223,27 @@ a:hover { color: var(--primary-hover); }
 }
 
 .pos-cart-item__qty {
-  width: 42px;
+  width: 52px;
   text-align: center;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 0.25rem;
+  padding: 0.25rem 0.2rem;
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  -moz-appearance: textfield;
 }
 
 .pos-cart-item__qty:focus {
   outline: none;
   border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+  background: var(--bg-card);
 }
 
-/* Chrome remove arrows from number input */
+/* Chrome/Safari remove arrows from number input */
 .pos-cart-item__qty::-webkit-outer-spin-button,
 .pos-cart-item__qty::-webkit-inner-spin-button {
   -webkit-appearance: none;

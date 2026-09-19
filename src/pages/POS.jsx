@@ -169,19 +169,73 @@ export default function POS() {
     productoSearchRef.current?.focus();
   }
 
-  // Update cart quantity
-  function actualizarCantidad(productoId, nuevaCantidad) {
+  // Update cart quantity from +/- buttons
+  function ajustarCantidad(productoId, delta) {
     const item = carrito.find(i => i.producto_id === productoId);
-    if (nuevaCantidad < 1) return;
-    if (nuevaCantidad > item.stock_disponible) {
+    if (!item) return;
+    const actual = parseInt(item.cantidad, 10) || 1;
+    const nueva = actual + delta;
+    if (nueva < 1) return;
+    if (nueva > item.stock_disponible) {
       toast.error(`Stock insuficiente. Disponible: ${item.stock_disponible}`);
       return;
     }
     setCarrito(carrito.map(i =>
       i.producto_id === productoId
-        ? { ...i, cantidad: nuevaCantidad, subtotal: nuevaCantidad * i.precio_unitario }
+        ? { ...i, cantidad: nueva, subtotal: nueva * i.precio_unitario }
         : i
     ));
+  }
+
+  // Update cart quantity manually typed by user
+  function handleCantidadChange(productoId, valorRaw) {
+    if (valorRaw === '') {
+      setCarrito(carrito.map(i =>
+        i.producto_id === productoId
+          ? { ...i, cantidad: '', subtotal: 0 }
+          : i
+      ));
+      return;
+    }
+    const num = parseInt(valorRaw, 10);
+    if (isNaN(num)) return;
+    const item = carrito.find(i => i.producto_id === productoId);
+    if (!item) return;
+
+    if (num > item.stock_disponible) {
+      toast.error(`Stock máximo disponible: ${item.stock_disponible}`);
+      setCarrito(carrito.map(i =>
+        i.producto_id === productoId
+          ? { ...i, cantidad: item.stock_disponible, subtotal: item.stock_disponible * i.precio_unitario }
+          : i
+      ));
+      return;
+    }
+
+    setCarrito(carrito.map(i =>
+      i.producto_id === productoId
+        ? { ...i, cantidad: num, subtotal: Math.max(0, num) * i.precio_unitario }
+        : i
+    ));
+  }
+
+  // Ensure valid quantity on blur
+  function handleCantidadBlur(productoId) {
+    const item = carrito.find(i => i.producto_id === productoId);
+    if (!item) return;
+    const num = parseInt(item.cantidad, 10);
+    if (!num || num < 1) {
+      setCarrito(carrito.map(i =>
+        i.producto_id === productoId
+          ? { ...i, cantidad: 1, subtotal: 1 * i.precio_unitario }
+          : i
+      ));
+    }
+  }
+
+  // Backward compatibility alias
+  function actualizarCantidad(productoId, nuevaCantidad) {
+    handleCantidadChange(productoId, String(nuevaCantidad));
   }
 
   // Remove from cart
@@ -190,7 +244,10 @@ export default function POS() {
   }
 
   // Calculate totals
-  const subtotalUSD = carrito.reduce((sum, item) => sum + item.subtotal, 0);
+  const subtotalUSD = carrito.reduce((sum, item) => {
+    const qty = parseInt(item.cantidad, 10) || 0;
+    return sum + (qty * (item.precio_unitario || 0));
+  }, 0);
   const totalUSD = subtotalUSD;
   const totalBs = tasaHoy ? totalUSD * parseFloat(tasaHoy.tasa_usd_bs) : 0;
 
@@ -427,7 +484,7 @@ export default function POS() {
         factura_id: factura.id,
         producto_id: item.producto_id,
         producto_nombre: item.producto_nombre,
-        cantidad: item.cantidad,
+        cantidad: parseInt(item.cantidad, 10) || 1,
         precio_unitario_usd: item.precio_unitario,
       }));
 
@@ -650,18 +707,36 @@ export default function POS() {
                       <span className="pos-cart-item__price">{formatUSD(item.precio_unitario)} c/u</span>
                     </div>
                     <div className="pos-cart-item__controls">
-                      <button className="btn btn--ghost btn--xs" onClick={() => actualizarCantidad(item.producto_id, item.cantidad - 1)}>−</button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--xs"
+                        onClick={() => ajustarCantidad(item.producto_id, -1)}
+                        title="Disminuir"
+                      >−</button>
                       <input
                         type="number"
                         className="pos-cart-item__qty"
                         value={item.cantidad}
                         min={1}
                         max={item.stock_disponible}
-                        onChange={(e) => actualizarCantidad(item.producto_id, parseInt(e.target.value) || 1)}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => handleCantidadChange(item.producto_id, e.target.value)}
+                        onBlur={() => handleCantidadBlur(item.producto_id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.target.blur();
+                        }}
+                        title={`Escriba un número (1 a ${item.stock_disponible})`}
                       />
-                      <button className="btn btn--ghost btn--xs" onClick={() => actualizarCantidad(item.producto_id, item.cantidad + 1)}>+</button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--xs"
+                        onClick={() => ajustarCantidad(item.producto_id, 1)}
+                        title="Aumentar"
+                      >+</button>
                     </div>
-                    <span className="pos-cart-item__subtotal">{formatUSD(item.subtotal)}</span>
+                    <span className="pos-cart-item__subtotal">
+                      {formatUSD((parseInt(item.cantidad, 10) || 0) * item.precio_unitario)}
+                    </span>
                     <button className="btn btn--ghost btn--xs text-danger" onClick={() => quitarDelCarrito(item.producto_id)}>
                       <HiOutlineTrash />
                     </button>
@@ -696,6 +771,10 @@ export default function POS() {
                 className="btn btn--primary btn--full"
                 onClick={() => {
                   if (carrito.length === 0) { toast.error('Carrito vacío'); return; }
+                  if (carrito.some(i => !i.cantidad || parseInt(i.cantidad, 10) < 1)) {
+                    toast.error('Por favor especifique cantidades válidas en el carrito');
+                    return;
+                  }
                   if (!clienteSeleccionado) { toast.error('Seleccione un cliente'); return; }
                   if (!tasaHoy) { toast.error('Registre la tasa del día primero'); return; }
                   setShowPago(true);
