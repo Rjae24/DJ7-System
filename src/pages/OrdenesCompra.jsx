@@ -5,6 +5,7 @@ import { formatUSD, formatFecha } from '../utils/formatters';
 import { ESTADOS_ORDEN } from '../utils/constants';
 import toast from 'react-hot-toast';
 import Pagination from '../components/common/Pagination';
+import ConfirmModal from '../components/common/ConfirmModal';
 import {
   HiOutlinePlus, HiOutlineCheckCircle, HiOutlineXCircle,
   HiOutlineEye, HiOutlineTrash, HiOutlineMagnifyingGlass,
@@ -20,6 +21,8 @@ export default function OrdenesCompra() {
   const [showModal, setShowModal] = useState(false);
   const [showDetalle, setShowDetalle] = useState(null);
   const [form, setForm] = useState({ proveedor_id: '', notas: '', items: [{ producto_id: '', cantidad: 1, precio_unitario_usd: '' }] });
+  const [ordenAEliminar, setOrdenAEliminar] = useState(null);
+  const [eliminando, setEliminando] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
@@ -104,6 +107,26 @@ export default function OrdenesCompra() {
     setShowDetalle({ ...orden, detalles: data || [] });
   }
 
+  function solicitarEliminacion(orden) {
+    setOrdenAEliminar(orden);
+  }
+
+  async function confirmarEliminacion() {
+    if (!ordenAEliminar) return;
+    setEliminando(true);
+    try {
+      const { error } = await supabase.rpc('eliminar_orden_compra', { p_orden_id: ordenAEliminar.id });
+      if (error) throw error;
+      toast.success(`Orden ${ordenAEliminar.numero_orden} eliminada correctamente`);
+      setOrdenAEliminar(null);
+      await loadData();
+    } catch (error) {
+      toast.error('Error al eliminar orden: ' + (error.message || 'Error desconocido'));
+    } finally {
+      setEliminando(false);
+    }
+  }
+
   const pageSize = 20;
   const ordenesPaginadas = ordenes.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
@@ -136,13 +159,21 @@ export default function OrdenesCompra() {
                   <td>{formatFecha(o.fecha_orden)}</td>
                   <td>
                     <div className="table__actions">
-                      <button className="btn btn--ghost btn--xs" onClick={() => verDetalle(o)}><HiOutlineEye /></button>
+                      <button className="btn btn--ghost btn--xs" onClick={() => verDetalle(o)} title="Ver detalle"><HiOutlineEye /></button>
                       {o.estado === 'pendiente' && (
                         <>
                           <button className="btn btn--ghost btn--xs text-success" onClick={() => cambiarEstado(o.id, 'recibida')} title="Marcar recibida"><HiOutlineCheckCircle /></button>
                           <button className="btn btn--ghost btn--xs text-danger" onClick={() => cambiarEstado(o.id, 'cancelada')} title="Cancelar"><HiOutlineXCircle /></button>
                         </>
                       )}
+                      <button
+                        className="btn btn--ghost btn--xs text-danger"
+                        onClick={() => solicitarEliminacion(o)}
+                        title="Eliminar orden"
+                        style={{ color: '#EF4444' }}
+                      >
+                        <HiOutlineTrash />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -244,6 +275,22 @@ export default function OrdenesCompra() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Order Deletion */}
+      <ConfirmModal
+        isOpen={!!ordenAEliminar}
+        title={`¿Eliminar Orden ${ordenAEliminar?.numero_orden}?`}
+        message={
+          ordenAEliminar
+            ? `¿Estás seguro de eliminar permanentemente la orden ${ordenAEliminar.numero_orden} (${ordenAEliminar.proveedores?.nombre || 'Proveedor'}) por un total de ${formatUSD(ordenAEliminar.total_usd)}?\n\nEsta acción no se puede deshacer.`
+            : ''
+        }
+        confirmText="Sí, Eliminar Orden"
+        variant="danger"
+        loading={eliminando}
+        onConfirm={confirmarEliminacion}
+        onCancel={() => { if (!eliminando) setOrdenAEliminar(null); }}
+      />
     </div>
   );
 }

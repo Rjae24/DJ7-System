@@ -13,7 +13,7 @@ import {
 } from 'react-icons/hi2';
 
 export default function Usuarios() {
-  const { createUser } = useAuth();
+  const { createUser, profile } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -24,6 +24,7 @@ export default function Usuarios() {
   // Confirm modal state
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [usuarioAEliminar, setUsuarioAEliminar] = useState(null);
+  const [eliminando, setEliminando] = useState(false);
 
   useEffect(() => { loadUsuarios(); }, []);
 
@@ -75,26 +76,28 @@ export default function Usuarios() {
   }
 
   function solicitarEliminacion(usuario) {
+    if (usuario.id === profile?.id) {
+      toast.error('No puedes eliminar tu propia cuenta');
+      return;
+    }
     setUsuarioAEliminar(usuario);
     setConfirmOpen(true);
   }
 
   async function confirmarEliminacion() {
     if (!usuarioAEliminar) return;
+    setEliminando(true);
     try {
-      // Desactivar el usuario en la tabla pública
-      const { error } = await supabase
-        .from('usuarios')
-        .update({ activo: false, nombre_completo: `[ELIMINADO] ${usuarioAEliminar.nombre_completo}` })
-        .eq('id', usuarioAEliminar.id);
+      const { error } = await supabase.rpc('eliminar_usuario', { p_user_id: usuarioAEliminar.id });
       if (error) throw error;
-      toast.success(`Usuario "${usuarioAEliminar.nombre_completo}" eliminado`);
-      loadUsuarios();
-    } catch (error) {
-      toast.error('Error al eliminar usuario: ' + error.message);
-    } finally {
+      toast.success(`Usuario "${usuarioAEliminar.nombre_completo}" eliminado permanentemente`);
       setConfirmOpen(false);
       setUsuarioAEliminar(null);
+      await loadUsuarios();
+    } catch (error) {
+      toast.error('Error al eliminar usuario: ' + (error.message || 'Error desconocido'));
+    } finally {
+      setEliminando(false);
     }
   }
 
@@ -215,16 +218,18 @@ export default function Usuarios() {
 
       {/* Modal confirmar eliminación */}
       <ConfirmModal
-        open={confirmOpen}
+        isOpen={confirmOpen}
         title="Eliminar Usuario"
         message={
           usuarioAEliminar
-            ? `¿Estás seguro de eliminar al usuario "${usuarioAEliminar.nombre_completo}"?\n\nSu cuenta quedará desactivada y no podrá acceder al sistema.`
+            ? `¿Estás seguro de eliminar permanentemente al usuario "${usuarioAEliminar.nombre_completo}" (${usuarioAEliminar.email})?\n\nEsta acción borrará su acceso al sistema y desvinculará sus registros contables históricos de forma segura.`
             : ''
         }
-        confirmLabel="Sí, Eliminar"
+        confirmText="Sí, Eliminar Permanentemente"
+        variant="danger"
+        loading={eliminando}
         onConfirm={confirmarEliminacion}
-        onCancel={() => { setConfirmOpen(false); setUsuarioAEliminar(null); }}
+        onCancel={() => { if (!eliminando) { setConfirmOpen(false); setUsuarioAEliminar(null); } }}
       />
     </div>
   );

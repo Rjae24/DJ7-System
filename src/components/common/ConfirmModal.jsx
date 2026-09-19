@@ -3,16 +3,21 @@ import { HiOutlineExclamationTriangle, HiOutlineXCircle } from 'react-icons/hi2'
 
 export default function ConfirmModal({
   isOpen,
+  open,
   title = '¿Estás seguro?',
   message = 'Esta acción no se puede deshacer.',
-  confirmText = 'Confirmar',
+  confirmText,
+  confirmLabel,
   cancelText = 'Cancelar',
   variant = 'danger', // 'danger' | 'warning' | 'primary'
   loading = false,
   onConfirm,
   onCancel,
 }) {
-  if (!isOpen) return null;
+  const isVisible = isOpen ?? open ?? false;
+  const buttonLabel = confirmText || confirmLabel || 'Confirmar';
+
+  if (!isVisible) return null;
 
   return (
     <div className="modal-overlay" onClick={loading ? undefined : onCancel} style={{ zIndex: 300 }}>
@@ -78,7 +83,7 @@ export default function ConfirmModal({
               color: '#fff',
             }}
           >
-            {loading ? 'Procesando...' : confirmText}
+            {loading ? 'Procesando...' : buttonLabel}
           </button>
         </div>
       </div>
