@@ -1,0 +1,25 @@
+{
+  "name": "dj7-print-bridge",
+  "version": "1.0.0",
+  "description": "Servidor puente de impresión térmica silenciosa dual (ESC/POS 80mm & TSPL) para DJ7 System",
+  "main": "server.js",
+  "bin": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "pkg . --targets node18-win-x64 --output dist-installer/print-bridge.exe"
+  },
+  "pkg": {
+    "scripts": [
+      "lib/**/*.js"
+    ],
+    "assets": [],
+    "outputPath": "dist-installer"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  }
+}

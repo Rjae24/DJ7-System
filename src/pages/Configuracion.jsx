@@ -10,12 +10,15 @@ import {
   HiOutlineSparkles,
   HiOutlineArrowPath,
   HiOutlineCheck,
+  HiOutlinePrinter,
 } from 'react-icons/hi2';
+import ModalConfigImpresoras from '../components/print/ModalConfigImpresoras';
 
 export default function Configuracion() {
   const [config, setConfig] = useState(() => getEmpresaConfig());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [modalImpresorasOpen, setModalImpresorasOpen] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -124,7 +127,42 @@ export default function Configuracion() {
         <h1 className="page__title">Configuración del Sistema</h1>
       </div>
 
-      <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%' }}>
+      <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        {/* Card Impresión Térmica Silenciosa */}
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--success, #22C55E)',
+                fontSize: '1.25rem'
+              }}>
+                <HiOutlinePrinter />
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.15rem', fontWeight: 600, margin: 0 }}>Impresoras Térmicas y Agente Local</h2>
+                <p style={{ fontSize: '0.85rem', color: '#888', margin: 0 }}>
+                  Impresión silenciosa directa sin ventanas de diálogo (Tickets 80mm y Etiquetas TSPL).
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => setModalImpresorasOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <HiOutlinePrinter /> Configurar Impresoras
+            </button>
+          </div>
+        </div>
+
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid #2A2A2A', paddingBottom: '1rem' }}>
             <div style={{
@@ -259,6 +297,11 @@ export default function Configuracion() {
           </form>
         </div>
       </div>
+
+      <ModalConfigImpresoras
+        isOpen={modalImpresorasOpen}
+        onClose={() => setModalImpresorasOpen(false)}
+      />
     </div>
   );
 }

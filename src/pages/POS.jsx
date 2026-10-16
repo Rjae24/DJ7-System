@@ -15,38 +15,53 @@ import {
   HiOutlineXMark,
   HiOutlineUserPlus,
   HiOutlineArrowPath,
+  HiOutlineBolt,
 } from 'react-icons/hi2';
+import ModalConfigImpresoras from '../components/print/ModalConfigImpresoras';
+import { imprimirFactura, getPrinterConfig } from '../services/printService';
+import { usePosTabs } from '../components/pos/usePosTabs';
+import PosTabsBar from '../components/pos/PosTabsBar';
+import PosPaymentPanel from '../components/pos/PosPaymentPanel';
+import PosClientSection from '../components/pos/PosClientSection';
+import { procesarEmisionFactura } from '../components/pos/posInvoiceService';
+
+import PosCartSection from '../components/pos/PosCartSection';
 
 export default function POS() {
   const { profile, isAdmin } = useAuth();
-  
-  // Client
-  const [clienteSearch, setClienteSearch] = useState('');
+  const [modalImpresorasOpen, setModalImpresorasOpen] = useState(false);
+
+  // Sistema de Cuentas Simultáneas y Caché persistente (Local Storage)
+  const {
+    cuentas,
+    activeIdx,
+    setActiveIdx,
+    cuentaActiva,
+    actualizarCuentaActiva,
+    agregarCuenta,
+    cerrarCuenta,
+    limpiarCuentaActiva,
+  } = usePosTabs();
+
+  // Atajos para la cuenta activa en foco
+  const clienteSeleccionado = cuentaActiva?.clienteSeleccionado || null;
+  const clienteSearch = cuentaActiva?.clienteSearch || '';
+  const carrito = cuentaActiva?.carrito || [];
+  const showPago = cuentaActiva?.showPago || false;
+  const metodosPago = cuentaActiva?.metodosPago || [];
+
+  // Estados locales temporales (búsqueda y modales)
   const [clienteResults, setClienteResults] = useState([]);
-  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
   const [nuevoCliente, setNuevoCliente] = useState({ nombre: '', documento_identidad: '', telefono: '' });
-  
-  // Products
   const [productoSearch, setProductoSearch] = useState('');
   const [productoResults, setProductoResults] = useState([]);
-  const [carrito, setCarrito] = useState([]);
-  
-  // Exchange rate
   const [tasaHoy, setTasaHoy] = useState(null);
-  
-  // Payment
-  const [showPago, setShowPago] = useState(false);
-  const [metodosPago, setMetodosPago] = useState([]);
-  
-  // Invoice result
   const [facturaEmitida, setFacturaEmitida] = useState(null);
   const [showTicket, setShowTicket] = useState(false);
-  
   const [loading, setLoading] = useState(false);
   const productoSearchRef = useRef(null);
 
-  // Load today's rate on mount
   useEffect(() => {
     loadTasaHoy();
   }, []);
@@ -92,9 +107,9 @@ export default function POS() {
     }
   }
 
-  // Search clients
+  // Búsqueda de clientes
   async function searchClientes(query) {
-    setClienteSearch(query);
+    actualizarCuentaActiva({ clienteSearch: query });
     if (query.length < 2) { setClienteResults([]); return; }
     const { data } = await supabase
       .from('clientes')
@@ -104,7 +119,6 @@ export default function POS() {
     setClienteResults(data || []);
   }
 
-  // Create new client inline
   async function crearCliente(e) {
     e.preventDefault();
     if (!nuevoCliente.nombre || !nuevoCliente.documento_identidad) {
@@ -118,7 +132,7 @@ export default function POS() {
         .select()
         .single();
       if (error) throw error;
-      setClienteSeleccionado(data);
+      actualizarCuentaActiva({ clienteSeleccionado: data, clienteSearch: '' });
       setShowNuevoCliente(false);
       setNuevoCliente({ nombre: '', documento_identidad: '', telefono: '' });
       toast.success('Cliente creado');
@@ -127,7 +141,7 @@ export default function POS() {
     }
   }
 
-  // Search products
+  // Búsqueda de productos
   async function searchProductos(query) {
     setProductoSearch(query);
     if (query.length < 2) { setProductoResults([]); return; }
@@ -141,7 +155,7 @@ export default function POS() {
     setProductoResults(data || []);
   }
 
-  // Add product to cart
+  // Operaciones del Carrito en la Cuenta Activa
   function agregarAlCarrito(producto) {
     const existente = carrito.find(item => item.producto_id === producto.id);
     if (existente) {
@@ -149,131 +163,80 @@ export default function POS() {
         toast.error(`Stock insuficiente. Disponible: ${producto.stock}`);
         return;
       }
-      setCarrito(carrito.map(item =>
+      const nuevoCarrito = carrito.map(item =>
         item.producto_id === producto.id
           ? { ...item, cantidad: item.cantidad + 1, subtotal: (item.cantidad + 1) * item.precio_unitario }
           : item
-      ));
+      );
+      actualizarCuentaActiva({ carrito: nuevoCarrito });
     } else {
-      setCarrito([...carrito, {
+      const nuevoItem = {
         producto_id: producto.id,
         producto_nombre: producto.nombre,
         precio_unitario: parseFloat(producto.precio_usd),
         cantidad: 1,
         subtotal: parseFloat(producto.precio_usd),
         stock_disponible: producto.stock,
-      }]);
+        es_combo: !!producto.es_combo,
+        items_combo: producto.items_combo || [],
+      };
+      actualizarCuentaActiva({ carrito: [...carrito, nuevoItem] });
     }
     setProductoSearch('');
     setProductoResults([]);
     productoSearchRef.current?.focus();
   }
 
-  // Update cart quantity from +/- buttons
-  function ajustarCantidad(productoId, delta) {
+  function actualizarCantidad(productoId, nuevaCantidad) {
     const item = carrito.find(i => i.producto_id === productoId);
     if (!item) return;
-    const actual = parseInt(item.cantidad, 10) || 1;
-    const nueva = actual + delta;
-    if (nueva < 1) return;
-    if (nueva > item.stock_disponible) {
+    const val = parseInt(nuevaCantidad, 10);
+    if (isNaN(val) || val < 1) return;
+    if (val > item.stock_disponible) {
       toast.error(`Stock insuficiente. Disponible: ${item.stock_disponible}`);
       return;
     }
-    setCarrito(carrito.map(i =>
+    const nuevoCarrito = carrito.map(i =>
       i.producto_id === productoId
-        ? { ...i, cantidad: nueva, subtotal: nueva * i.precio_unitario }
+        ? { ...i, cantidad: val, subtotal: val * i.precio_unitario }
         : i
-    ));
+    );
+    actualizarCuentaActiva({ carrito: nuevoCarrito });
   }
 
-  // Update cart quantity manually typed by user
-  function handleCantidadChange(productoId, valorRaw) {
-    if (valorRaw === '') {
-      setCarrito(carrito.map(i =>
-        i.producto_id === productoId
-          ? { ...i, cantidad: '', subtotal: 0 }
-          : i
-      ));
-      return;
-    }
-    const num = parseInt(valorRaw, 10);
-    if (isNaN(num)) return;
-    const item = carrito.find(i => i.producto_id === productoId);
-    if (!item) return;
-
-    if (num > item.stock_disponible) {
-      toast.error(`Stock máximo disponible: ${item.stock_disponible}`);
-      setCarrito(carrito.map(i =>
-        i.producto_id === productoId
-          ? { ...i, cantidad: item.stock_disponible, subtotal: item.stock_disponible * i.precio_unitario }
-          : i
-      ));
-      return;
-    }
-
-    setCarrito(carrito.map(i =>
-      i.producto_id === productoId
-        ? { ...i, cantidad: num, subtotal: Math.max(0, num) * i.precio_unitario }
-        : i
-    ));
-  }
-
-  // Ensure valid quantity on blur
-  function handleCantidadBlur(productoId) {
-    const item = carrito.find(i => i.producto_id === productoId);
-    if (!item) return;
-    const num = parseInt(item.cantidad, 10);
-    if (!num || num < 1) {
-      setCarrito(carrito.map(i =>
-        i.producto_id === productoId
-          ? { ...i, cantidad: 1, subtotal: 1 * i.precio_unitario }
-          : i
-      ));
-    }
-  }
-
-  // Backward compatibility alias
-  function actualizarCantidad(productoId, nuevaCantidad) {
-    handleCantidadChange(productoId, String(nuevaCantidad));
-  }
-
-  // Remove from cart
   function quitarDelCarrito(productoId) {
-    setCarrito(carrito.filter(i => i.producto_id !== productoId));
+    actualizarCuentaActiva({ carrito: carrito.filter(i => i.producto_id !== productoId) });
   }
 
-  // Calculate totals
-  const subtotalUSD = carrito.reduce((sum, item) => {
-    const qty = parseInt(item.cantidad, 10) || 0;
-    return sum + (qty * (item.precio_unitario || 0));
-  }, 0);
+  // Cálculos de Totales
+  const subtotalUSD = carrito.reduce((sum, item) => sum + item.subtotal, 0);
   const totalUSD = subtotalUSD;
   const totalBs = tasaHoy ? totalUSD * parseFloat(tasaHoy.tasa_usd_bs) : 0;
 
-
+  // Métodos de Pago
   function agregarMetodoPago(metodoId = '') {
     const metodoConfig = METODOS_PAGO.find(m => m.id === metodoId);
     const tasa = tasaHoy ? parseFloat(tasaHoy.tasa_usd_bs) : 0;
-    
     const otherPayments = metodosPago.reduce((sum, mp) => sum + parseFloat(mp.monto_usd || 0), 0);
     const pend = Math.max(0, parseFloat((totalUSD - otherPayments).toFixed(2)));
     const defaultMontoUSD = metodoConfig?.isCashea ? parseFloat((pend * 0.40).toFixed(2)) : pend;
     const montoBs = (metodoConfig?.enBs && tasa > 0) ? parseFloat((defaultMontoUSD * tasa).toFixed(2)) : 0;
 
-    setMetodosPago([
-      ...metodosPago,
-      {
-        metodo: metodoId,
-        monto_usd: defaultMontoUSD,
-        monto_bs: montoBs,
-        referencia: '',
-        zelle_email: '',
-        zelle_titular: '',
-        cashea_inicial_usd: defaultMontoUSD,
-        cashea_inicial_bs: montoBs,
-      }
-    ]);
+    actualizarCuentaActiva({
+      metodosPago: [
+        ...metodosPago,
+        {
+          metodo: metodoId,
+          monto_usd: defaultMontoUSD,
+          monto_bs: montoBs,
+          referencia: '',
+          zelle_email: '',
+          zelle_titular: '',
+          cashea_inicial_usd: defaultMontoUSD,
+          cashea_inicial_bs: montoBs,
+        }
+      ]
+    });
   }
 
   function actualizarMetodoPago(index, field, value) {
@@ -290,17 +253,12 @@ export default function POS() {
       const pend = Math.max(0, parseFloat((totalUSD - otherPayments).toFixed(2)));
 
       if (metodoConfig?.isCashea) {
-        // Default initial is 40% of remaining balance, or 0 if pend is 0
         item.monto_usd = parseFloat((pend * 0.40).toFixed(2));
       } else if (!item.monto_usd || item.monto_usd === 0) {
         item.monto_usd = pend;
       }
 
-      if (metodoConfig?.enBs && tasa > 0) {
-        item.monto_bs = parseFloat((item.monto_usd * tasa).toFixed(2));
-      } else {
-        item.monto_bs = 0;
-      }
+      item.monto_bs = (metodoConfig?.enBs && tasa > 0) ? parseFloat((item.monto_usd * tasa).toFixed(2)) : 0;
     } else if (field === 'monto_usd') {
       const numVal = parseFloat(value) || 0;
       item.monto_usd = value === '' ? '' : numVal;
@@ -319,14 +277,13 @@ export default function POS() {
     }
 
     updated[index] = item;
-    setMetodosPago(updated);
+    actualizarCuentaActiva({ metodosPago: updated });
   }
 
   function quitarMetodoPago(index) {
-    setMetodosPago(metodosPago.filter((_, i) => i !== index));
+    actualizarCuentaActiva({ metodosPago: metodosPago.filter((_, i) => i !== index) });
   }
 
-  // Cashea payment breakdown calculations
   const tieneCashea = metodosPago.some(mp => mp.metodo === 'cashea');
   const casheaItem = metodosPago.find(mp => mp.metodo === 'cashea');
   const otrosPagos = metodosPago.filter(mp => mp.metodo !== 'cashea').reduce((sum, mp) => sum + parseFloat(mp.monto_usd || 0), 0);
@@ -337,14 +294,13 @@ export default function POS() {
     ? (casheaInicial <= 0 ? Math.max(0, parseFloat((totalUSD - otrosPagos).toFixed(2))) : 0)
     : Math.max(0, parseFloat((totalUSD - totalPagadoEnTienda).toFixed(2)));
 
-  // Emit invoice
+  // Emisión de Factura
   async function emitirFactura() {
     if (!clienteSeleccionado) { toast.error('Seleccione un cliente'); return; }
     if (carrito.length === 0) { toast.error('Agregue productos al carrito'); return; }
     if (!tasaHoy) { toast.error('No hay tasa de cambio registrada'); return; }
     if (restante > 0.01) { toast.error(`Faltan ${formatUSD(restante)} por pagar`); return; }
 
-    // Validate payment methods requirements
     for (const mp of metodosPago) {
       if (!mp.metodo) { toast.error('Seleccione el método de pago'); return; }
       if (mp.metodo === 'zelle') {
@@ -360,172 +316,39 @@ export default function POS() {
 
     setLoading(true);
     try {
-      // Generate invoice number
-      const { data: numData, error: numError } = await supabase.rpc('generar_numero_factura');
-      if (numError) throw numError;
-
-      // Prepare payment methods for storage
-      const tasa = parseFloat(tasaHoy.tasa_usd_bs);
-      const desgloseInicial = tieneCashea ? metodosPago.map(mp => {
-        if (mp.metodo === 'cashea') {
-          const metodoInicialConfig = METODOS_INICIAL_CASHEA.find(m => m.id === mp.cashea_metodo_inicial);
-          const montoUSD = parseFloat(mp.monto_usd || 0);
-          const montoBs = mp.monto_bs ? parseFloat(mp.monto_bs) : (tasa > 0 ? parseFloat((montoUSD * tasa).toFixed(2)) : 0);
-          return {
-            metodo: metodoInicialConfig?.label || 'Punto de Venta',
-            metodo_id: mp.cashea_metodo_inicial || 'punto_venta',
-            monto_usd: montoUSD,
-            monto_bs: montoBs,
-            referencia: mp.cashea_referencia_inicial || '',
-          };
-        }
-        const montoUSD = parseFloat(mp.monto_usd || 0);
-        const montoBs = mp.monto_bs ? parseFloat(mp.monto_bs) : (tasa > 0 ? parseFloat((montoUSD * tasa).toFixed(2)) : 0);
-        return {
-          metodo: METODOS_PAGO.find(m => m.id === mp.metodo)?.label || mp.metodo,
-          metodo_id: mp.metodo,
-          monto_usd: montoUSD,
-          monto_bs: montoBs,
-          referencia: mp.referencia || '',
-          titular: mp.zelle_titular || '',
-        };
-      }) : [];
-
-      const metodosStorage = metodosPago.map(mp => {
-        const montoUSD = parseFloat(mp.monto_usd || 0);
-        const montoBs = mp.monto_bs ? parseFloat(mp.monto_bs) : (tasa > 0 ? parseFloat((montoUSD * tasa).toFixed(2)) : 0);
-
-        if (mp.metodo === 'cashea') {
-          const inicialUSD = totalPagadoEnTienda;
-          const inicialBs = parseFloat((inicialUSD * tasa).toFixed(2));
-          const creditoUSD = Math.max(0, parseFloat((totalUSD - totalPagadoEnTienda).toFixed(2)));
-          const creditoBs = parseFloat((creditoUSD * tasa).toFixed(2));
-          const metodoInicialConfig = METODOS_INICIAL_CASHEA.find(m => m.id === mp.cashea_metodo_inicial);
-          return {
-            metodo: 'Cashea',
-            metodo_id: 'cashea',
-            monto_usd: montoUSD,
-            monto_bs: montoBs,
-            inicial_usd: inicialUSD,
-            inicial_bs: inicialBs,
-            cashea_metodo_inicial: mp.cashea_metodo_inicial || 'punto_venta',
-            cashea_metodo_inicial_label: metodoInicialConfig?.label || 'Punto de Venta',
-            cashea_referencia_inicial: mp.cashea_referencia_inicial || '',
-            credito_cashea_usd: creditoUSD,
-            credito_cashea_bs: creditoBs,
-            referencia: mp.referencia || '',
-            desglose_inicial: desgloseInicial,
-          };
-        }
-        return {
-          metodo: METODOS_PAGO.find(m => m.id === mp.metodo)?.label || mp.metodo,
-          metodo_id: mp.metodo,
-          monto_usd: montoUSD,
-          monto_bs: montoBs,
-          ...(mp.referencia && { referencia: mp.referencia }),
-          ...(mp.zelle_titular && { zelle_titular: mp.zelle_titular }),
-          ...(mp.zelle_email && { zelle_email: mp.zelle_email }),
-        };
+      const { factura, numData, metodosStorage } = await procesarEmisionFactura({
+        clienteSeleccionado,
+        carrito,
+        tasaHoy,
+        totalUSD,
+        totalBs,
+        metodosPago,
+        tieneCashea,
+        totalPagadoEnTienda,
+        profile,
       });
 
-      // Insert invoice without subtotal_usd since subtotal_usd is a generated column in Supabase
-      const invoicePayload = {
-        numero_factura: numData,
-        cliente_id: clienteSeleccionado.id,
-        vendedor_id: profile.id,
-        tasa_id: tasaHoy.id,
-        descuento_usd: 0,
-        total_usd: totalUSD,
-        total_bs: totalBs,
-        metodos_pago: metodosStorage,
-      };
-
-      let factura;
-      let { data: factData, error: factError } = await supabase
-        .from('facturas')
-        .insert(invoicePayload)
-        .select()
-        .single();
-
-      // Si ocurre colisión de clave única por concurrencia, reintentar regenerando número
-      if (factError && factError.code === '23505' && factError.message?.includes('facturas_numero_factura_key')) {
-        const { data: nuevoNum } = await supabase.rpc('generar_numero_factura');
-        if (nuevoNum) {
-          invoicePayload.numero_factura = nuevoNum;
-          const retryRes = await supabase
-            .from('facturas')
-            .insert(invoicePayload)
-            .select()
-            .single();
-          factData = retryRes.data;
-          factError = retryRes.error;
-        }
-      }
-
-      if (factError) {
-        // Fallback: if schema strictly requires subtotal_usd or has different column requirements
-        if (factError.message?.includes('subtotal_usd')) {
-          const { data: retryData, error: retryError } = await supabase
-            .from('facturas')
-            .insert({ ...invoicePayload, subtotal_usd: subtotalUSD })
-            .select()
-            .single();
-          if (retryError) throw retryError;
-          factura = retryData;
-        } else {
-          throw factError;
-        }
-      } else {
-        factura = factData;
-      }
-
-      // Insert invoice details - omitting subtotal_usd by default in case it is also a generated column
-      const detallesBase = carrito.map(item => ({
-        factura_id: factura.id,
-        producto_id: item.producto_id,
-        producto_nombre: item.producto_nombre,
-        cantidad: parseInt(item.cantidad, 10) || 1,
-        precio_unitario_usd: item.precio_unitario,
-      }));
-
-      const { error: detError } = await supabase
-        .from('detalles_factura')
-        .insert(detallesBase);
-
-      if (detError) {
-        // If detalles_factura requires subtotal_usd, retry with it
-        if (detError.message?.includes('subtotal_usd') || detError.code === '23502') {
-          const detallesConSubtotal = carrito.map(item => ({
-            ...detallesBase.find(d => d.producto_id === item.producto_id),
-            subtotal_usd: item.subtotal,
-          }));
-          const { error: detRetryError } = await supabase
-            .from('detalles_factura')
-            .insert(detallesConSubtotal);
-          if (detRetryError) throw detRetryError;
-        } else {
-          throw detError;
-        }
-      }
-
-      // Success!
-      setFacturaEmitida({
+      const nuevaFacturaData = {
         ...factura,
         cliente: clienteSeleccionado,
         detalles: carrito,
         tasa: tasaHoy,
         vendedor: profile,
         metodos_pago_detalle: metodosStorage,
-      });
+      };
+      setFacturaEmitida(nuevaFacturaData);
+
+      try {
+        const printCfg = getPrinterConfig()?.facturas;
+        if (printCfg?.autoPrint && (printCfg?.targetPrinter || printCfg?.connectionType === 'socket')) {
+          imprimirFactura(nuevaFacturaData).catch(() => {});
+        }
+      } catch (printErr) {
+        // Silenciar error en autoPrint
+      }
 
       toast.success(`Factura ${numData} emitida correctamente`);
-      
-      // Reset form
-      setCarrito([]);
-      setClienteSeleccionado(null);
-      setClienteSearch('');
-      setMetodosPago([]);
-      setShowPago(false);
+      limpiarCuentaActiva();
     } catch (error) {
       toast.error(error.message || 'Error al emitir factura');
     } finally {
@@ -538,7 +361,6 @@ export default function POS() {
     setShowTicket(false);
   }
 
-  // Render invoice success screen
   if (facturaEmitida) {
     return (
       <div className="page">
@@ -557,9 +379,16 @@ export default function POS() {
           <p className="pos-success__total">{formatUSD(facturaEmitida.total_usd)}</p>
           <p className="pos-success__total-bs">{formatBs(facturaEmitida.total_bs)}</p>
           
-          <div className="pos-success__actions">
-            <button className="btn btn--primary" onClick={() => setShowTicket(true)}>
-              <HiOutlinePrinter /> Imprimir Ticket
+          <div className="pos-success__actions" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.75rem' }}>
+            <button 
+              className="btn btn--primary" 
+              onClick={() => imprimirFactura(facturaEmitida)}
+              title="Imprimir directamente en la impresora térmica sin diálogos"
+            >
+              <HiOutlineBolt /> Imprimir Térmico Directo (80mm)
+            </button>
+            <button className="btn btn--secondary" onClick={() => setShowTicket(true)}>
+              <HiOutlinePrinter /> Vista Previa
             </button>
             <button className="btn btn--outline" onClick={nuevaVenta}>
               <HiOutlinePlus /> Nueva Venta
@@ -573,7 +402,17 @@ export default function POS() {
   return (
     <div className="page pos-page">
       <div className="page__header">
-        <h1 className="page__title">Punto de Venta</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <h1 className="page__title">Punto de Venta</h1>
+          <button
+            className="btn btn--secondary btn--xs"
+            onClick={() => setModalImpresorasOpen(true)}
+            title="Configurar impresoras térmicas de tickets y etiquetas"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            <HiOutlinePrinter /> Configurar Impresora
+          </button>
+        </div>
         {tasaHoy && (
           <div className="pos-tasa" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span>Tasa BCV: <strong>Bs {formatTasa(tasaHoy.tasa_usd_bs)}</strong></span>
@@ -596,162 +435,57 @@ export default function POS() {
         )}
       </div>
 
+      {/* Barra de Múltiples Cuentas Concurrentes y Caché */}
+      <PosTabsBar
+        cuentas={cuentas}
+        activeIdx={activeIdx}
+        onSelectCuenta={setActiveIdx}
+        onAddCuenta={agregarCuenta}
+        onCloseCuenta={cerrarCuenta}
+        onRenameCuenta={(idx, nuevoNombre) => {
+          actualizarCuentaActiva({ nombre: nuevoNombre });
+        }}
+      />
+
       <div className="pos-layout">
-        {/* Left: Products area */}
+        {/* Izquierda: Selección de Cliente y Catálogo de Productos */}
         <div className="pos-products">
-          {/* Client selection */}
-          <div className="card pos-section">
-            <h3 className="card__title">Cliente</h3>
-            {clienteSeleccionado ? (
-              <div className="pos-cliente-selected">
-                <div>
-                  <strong>{clienteSeleccionado.nombre}</strong>
-                  <span>{clienteSeleccionado.documento_identidad}</span>
-                </div>
-                <button className="btn btn--ghost btn--sm" onClick={() => {
-                  setClienteSeleccionado(null);
-                  setClienteSearch('');
-                }}>
-                  <HiOutlineXMark />
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="search-box">
-                  <HiOutlineMagnifyingGlass className="search-box__icon" />
-                  <input
-                    type="text"
-                    placeholder="Buscar por nombre o cédula..."
-                    value={clienteSearch}
-                    onChange={(e) => searchClientes(e.target.value)}
-                  />
-                  <button className="btn btn--ghost btn--sm" onClick={() => setShowNuevoCliente(true)} title="Nuevo Cliente">
-                    <HiOutlineUserPlus />
-                  </button>
-                </div>
-                {clienteResults.length > 0 && (
-                  <div className="search-results">
-                    {clienteResults.map(c => (
-                      <button key={c.id} className="search-result-item" onClick={() => {
-                        setClienteSeleccionado(c);
-                        setClienteSearch('');
-                        setClienteResults([]);
-                      }}>
-                        <span className="search-result-item__name">{c.nombre}</span>
-                        <span className="search-result-item__sub">{c.documento_identidad}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
+          <PosClientSection
+            cuentaNombre={cuentaActiva?.nombre || 'Cuenta Actual'}
+            clienteSeleccionado={clienteSeleccionado}
+            clienteSearch={clienteSearch}
+            clienteResults={clienteResults}
+            showNuevoCliente={showNuevoCliente}
+            nuevoCliente={nuevoCliente}
+            onSearchClientes={searchClientes}
+            onSelectCliente={(c) => {
+              actualizarCuentaActiva({ clienteSeleccionado: c, clienteSearch: '' });
+              setClienteResults([]);
+            }}
+            onDeselectCliente={() => actualizarCuentaActiva({ clienteSeleccionado: null, clienteSearch: '' })}
+            onToggleNuevoCliente={setShowNuevoCliente}
+            onNuevoClienteChange={setNuevoCliente}
+            onCrearCliente={crearCliente}
+          />
 
-            {/* New Client Modal Inline */}
-            {showNuevoCliente && (
-              <div className="pos-nuevo-cliente">
-                <form onSubmit={crearCliente}>
-                  <h4>Nuevo Cliente</h4>
-                  <input placeholder="Nombre completo" value={nuevoCliente.nombre} onChange={e => setNuevoCliente({...nuevoCliente, nombre: e.target.value})} required />
-                  <input placeholder="Cédula / RIF" value={nuevoCliente.documento_identidad} onChange={e => setNuevoCliente({...nuevoCliente, documento_identidad: e.target.value})} required />
-                  <input placeholder="Teléfono" value={nuevoCliente.telefono} onChange={e => setNuevoCliente({...nuevoCliente, telefono: e.target.value})} />
-                  <div className="pos-nuevo-cliente__actions">
-                    <button type="submit" className="btn btn--primary btn--sm">Guardar</button>
-                    <button type="button" className="btn btn--ghost btn--sm" onClick={() => setShowNuevoCliente(false)}>Cancelar</button>
-                  </div>
-                </form>
-              </div>
-            )}
-          </div>
-
-            {/* Product search */}
-          <div className="card pos-section">
-            <h3 className="card__title">Agregar Productos</h3>
-            <div className="search-box">
-              <HiOutlineMagnifyingGlass className="search-box__icon" />
-              <input
-                ref={productoSearchRef}
-                type="text"
-                placeholder="Buscar por nombre o SKU..."
-                value={productoSearch}
-                onChange={(e) => searchProductos(e.target.value)}
-              />
-            </div>
-            {productoResults.length > 0 && (
-              <div className="search-results">
-                {productoResults.map(p => (
-                  <button key={p.id} className="search-result-item" onClick={() => agregarAlCarrito(p)}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span className="search-result-item__name">{p.nombre}</span>
-                      </div>
-                      <span className="search-result-item__sub">{p.sku} — Stock: {p.stock}</span>
-                    </div>
-                    <span className="search-result-item__price">{formatUSD(p.precio_usd)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Cart */}
-          <div className="card pos-section">
-            <h3 className="card__title">Carrito ({carrito.length})</h3>
-            {carrito.length === 0 ? (
-              <p className="card__empty">Agregue productos para comenzar</p>
-            ) : (
-              <div className="pos-cart">
-                {carrito.map(item => (
-                  <div key={item.producto_id} className="pos-cart-item">
-                    <div className="pos-cart-item__info">
-                      <span className="pos-cart-item__name">{item.producto_nombre}</span>
-                      <span className="pos-cart-item__price">{formatUSD(item.precio_unitario)} c/u</span>
-                    </div>
-                    <div className="pos-cart-item__controls">
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--xs"
-                        onClick={() => ajustarCantidad(item.producto_id, -1)}
-                        title="Disminuir"
-                      >−</button>
-                      <input
-                        type="number"
-                        className="pos-cart-item__qty"
-                        value={item.cantidad}
-                        min={1}
-                        max={item.stock_disponible}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => handleCantidadChange(item.producto_id, e.target.value)}
-                        onBlur={() => handleCantidadBlur(item.producto_id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') e.target.blur();
-                        }}
-                        title={`Escriba un número (1 a ${item.stock_disponible})`}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--xs"
-                        onClick={() => ajustarCantidad(item.producto_id, 1)}
-                        title="Aumentar"
-                      >+</button>
-                    </div>
-                    <span className="pos-cart-item__subtotal">
-                      {formatUSD((parseInt(item.cantidad, 10) || 0) * item.precio_unitario)}
-                    </span>
-                    <button className="btn btn--ghost btn--xs text-danger" onClick={() => quitarDelCarrito(item.producto_id)}>
-                      <HiOutlineTrash />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Sección de Búsqueda de Productos y Carrito (con soporte de Combos) */}
+          <PosCartSection
+            productoSearch={productoSearch}
+            onSearchChange={searchProductos}
+            productoResults={productoResults}
+            onAgregarAlCarrito={agregarAlCarrito}
+            productoSearchRef={productoSearchRef}
+            carrito={carrito}
+            cuentaNombre={cuentaActiva?.nombre}
+            onActualizarCantidad={actualizarCantidad}
+            onQuitarDelCarrito={quitarDelCarrito}
+          />
         </div>
 
-        {/* Right: Summary & Payment */}
+        {/* Derecha: Resumen de Totales y Pasarela de Cobro */}
         <div className="pos-summary">
           <div className="card">
             <h3 className="card__title">Resumen</h3>
-            
             <div className="pos-totals">
               <div className="pos-totals__row pos-totals__row--total">
                 <span>Total USD</span>
@@ -765,7 +499,6 @@ export default function POS() {
               )}
             </div>
 
-
             {!showPago ? (
               <button
                 className="btn btn--primary btn--full"
@@ -777,7 +510,7 @@ export default function POS() {
                   }
                   if (!clienteSeleccionado) { toast.error('Seleccione un cliente'); return; }
                   if (!tasaHoy) { toast.error('Registre la tasa del día primero'); return; }
-                  setShowPago(true);
+                  actualizarCuentaActiva({ showPago: true });
                   agregarMetodoPago();
                 }}
                 disabled={carrito.length === 0}
@@ -785,198 +518,30 @@ export default function POS() {
                 Cobrar {formatUSD(totalUSD)}
               </button>
             ) : (
-              <div className="pos-payment">
-                <h4>Métodos de Pago</h4>
-                
-                {metodosPago.map((mp, index) => {
-                  const metodoConfig = METODOS_PAGO.find(m => m.id === mp.metodo);
-                  return (
-                    <div key={index} className="pos-payment-method">
-                      <div className="pos-payment-method__header">
-                        <select
-                          value={mp.metodo}
-                          onChange={(e) => actualizarMetodoPago(index, 'metodo', e.target.value)}
-                        >
-                          <option value="">Seleccionar método...</option>
-                          {METODOS_PAGO.map(m => (
-                            <option key={m.id} value={m.id}>{m.label}</option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--xs text-danger"
-                          onClick={() => quitarMetodoPago(index)}
-                          title="Eliminar método"
-                        >
-                          <HiOutlineTrash />
-                        </button>
-                      </div>
-
-                      {mp.metodo && (
-                        <>
-                          <div className="pos-payment-method__amounts">
-                            <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                              <label style={{ fontSize: '0.75rem', color: metodoConfig?.isCashea ? '#EC4899' : undefined, fontWeight: metodoConfig?.isCashea ? 'bold' : undefined }}>
-                                {metodoConfig?.isCashea ? 'Inicial Cashea ($ USD)' : 'Monto ($ USD)'}
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="0.00"
-                                value={mp.monto_usd ?? ''}
-                                onChange={(e) => actualizarMetodoPago(index, 'monto_usd', e.target.value)}
-                              />
-                            </div>
-
-                            {metodoConfig?.enBs && (
-                              <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                                <label style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>Monto (Bs)</label>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  placeholder="0.00"
-                                  value={mp.monto_bs ?? ''}
-                                  onChange={(e) => actualizarMetodoPago(index, 'monto_bs', e.target.value)}
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Zelle details: Correo y Nombre del emisor */}
-                          {metodoConfig?.isZelle && (
-                            <div className="pos-payment-method__zelle">
-                              <div className="form-group" style={{ marginBottom: '0.35rem' }}>
-                                <input
-                                  type="text"
-                                  placeholder="Nombre / Titular del Emisor Zelle"
-                                  value={mp.zelle_titular || ''}
-                                  onChange={(e) => actualizarMetodoPago(index, 'zelle_titular', e.target.value)}
-                                  required
-                                />
-                              </div>
-                              <div className="form-group" style={{ marginBottom: 0 }}>
-                                <input
-                                  type="email"
-                                  placeholder="Correo del Emisor Zelle"
-                                  value={mp.zelle_email || ''}
-                                  onChange={(e) => actualizarMetodoPago(index, 'zelle_email', e.target.value)}
-                                  required
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Cashea details: Método de pago de la inicial y notificación */}
-                          {metodoConfig?.isCashea && (
-                            <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                              <div style={{
-                                background: 'rgba(234, 179, 8, 0.1)',
-                                border: '1px solid rgba(234, 179, 8, 0.3)',
-                                borderRadius: '6px',
-                                padding: '0.5rem 0.65rem',
-                                fontSize: '0.78rem',
-                                color: '#FACC15'
-                              }}>
-                                <span>El cliente paga esta inicial en tienda. El resto queda a crédito Cashea.</span>
-                              </div>
-
-                              <div className="form-group" style={{ marginBottom: 0 }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                  Método de Pago de la Inicial:
-                                </label>
-                                <select
-                                  value={mp.cashea_metodo_inicial || 'punto_venta'}
-                                  onChange={(e) => actualizarMetodoPago(index, 'cashea_metodo_inicial', e.target.value)}
-                                  style={{ marginTop: '0.2rem' }}
-                                >
-                                  {METODOS_INICIAL_CASHEA.map(mi => (
-                                    <option key={mi.id} value={mi.id}>
-                                      {mi.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              {/* Referencia opcional para el pago de la inicial si aplica */}
-                              {METODOS_INICIAL_CASHEA.find(mi => mi.id === (mp.cashea_metodo_inicial || 'punto_venta'))?.requiereReferencia && (
-                                <div className="form-group" style={{ marginBottom: 0 }}>
-                                  <input
-                                    type="text"
-                                    placeholder="N° Referencia del Pago de la Inicial"
-                                    value={mp.cashea_referencia_inicial || ''}
-                                    onChange={(e) => actualizarMetodoPago(index, 'cashea_referencia_inicial', e.target.value)}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Referencia para Pago Móvil, Punto de Venta, Transferencia o Cashea */}
-                          {metodoConfig?.requiereReferencia && (
-                            <div className="form-group" style={{ marginTop: '0.35rem', marginBottom: 0 }}>
-                              <input
-                                type="text"
-                                placeholder={
-                                  mp.metodo === 'pago_movil'
-                                    ? 'N° de Referencia Pago Móvil (ej. 4 últimos dígitos)'
-                                    : mp.metodo === 'cashea'
-                                    ? 'N° de Orden / Comprobante Cashea'
-                                    : 'N° de Referencia / Comprobante'
-                                }
-                                value={mp.referencia || ''}
-                                onChange={(e) => actualizarMetodoPago(index, 'referencia', e.target.value)}
-                                required
-                              />
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-
-                <button className="btn btn--ghost btn--sm" onClick={() => agregarMetodoPago()}>
-                  <HiOutlinePlus /> Agregar otro método (Pago Mixto)
-                </button>
-
-                <div className="pos-payment-summary">
-                  <div className="pos-totals__row">
-                    <span>{tieneCashea ? 'Total Cobrado hoy en Tienda' : 'Pagado'}</span>
-                    <span className="text-success">{formatUSD(totalPagadoEnTienda)}</span>
-                  </div>
-                  {tieneCashea && (
-                    <div className="pos-totals__row" style={{ color: '#EC4899', fontWeight: 'bold' }}>
-                      <span>Monto Financiado Cashea (Crédito)</span>
-                      <span>{formatUSD(casheaCreditoUSD)}</span>
-                    </div>
-                  )}
-                  {restante > 0.01 && (
-                    <div className="pos-totals__row">
-                      <span>Restante</span>
-                      <span className="text-danger">{formatUSD(restante)}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="pos-payment-actions">
-                  <button
-                    className="btn btn--primary btn--full"
-                    onClick={emitirFactura}
-                    disabled={loading || restante > 0.01}
-                  >
-                    {loading ? 'Procesando...' : `Emitir Factura ${formatUSD(totalUSD)}`}
-                  </button>
-                  <button className="btn btn--ghost btn--full" onClick={() => { setShowPago(false); setMetodosPago([]); }}>
-                    Cancelar
-                  </button>
-                </div>
-              </div>
+              <PosPaymentPanel
+                metodosPago={metodosPago}
+                totalUSD={totalUSD}
+                tasaHoy={tasaHoy}
+                tieneCashea={tieneCashea}
+                totalPagadoEnTienda={totalPagadoEnTienda}
+                casheaCreditoUSD={casheaCreditoUSD}
+                restante={restante}
+                loading={loading}
+                onActualizarMetodo={actualizarMetodoPago}
+                onQuitarMetodo={quitarMetodoPago}
+                onAgregarMetodo={() => agregarMetodoPago()}
+                onEmitirFactura={emitirFactura}
+                onCancelar={() => actualizarCuentaActiva({ showPago: false, metodosPago: [] })}
+              />
             )}
           </div>
         </div>
       </div>
+
+      <ModalConfigImpresoras
+        isOpen={modalImpresorasOpen}
+        onClose={() => setModalImpresorasOpen(false)}
+      />
     </div>
   );
 }

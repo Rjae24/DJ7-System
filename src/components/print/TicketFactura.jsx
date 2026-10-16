@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getEmpresaConfig, saveEmpresaConfig, DEFAULT_EMPRESA, PRINT_WIDTHS } from '../../utils/constants';
 import { formatUSD, formatBs, formatFecha, formatTasa } from '../../utils/formatters';
-import { HiOutlinePrinter, HiOutlineXMark } from 'react-icons/hi2';
+import { HiOutlinePrinter, HiOutlineXMark, HiOutlineBolt } from 'react-icons/hi2';
+import { imprimirFactura } from '../../services/printService';
+import { getTicketThermalStyles } from './ticketFacturaStyles';
 
 export default function TicketFactura({ factura, onClose }) {
   const config = PRINT_WIDTHS['80mm'];
   const [empresa, setEmpresa] = useState(() => getEmpresaConfig());
+  const [thermalPrinting, setThermalPrinting] = useState(false);
   const logoUrl = '/logo-dj7-solo.png';
 
   useEffect(() => {
@@ -65,132 +68,7 @@ export default function TicketFactura({ factura, onClose }) {
         <head>
           <title>Imprimir Factura - ${factura.numero_factura || ''}</title>
           <style>
-            @page {
-              margin: 0;
-              size: 80mm auto;
-            }
-            * {
-              box-sizing: border-box;
-              font-weight: bold !important;
-              color: #000 !important;
-            }
-            body {
-              margin: 0;
-              padding: 4mm 3mm;
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 11.5px;
-              line-height: 1.35;
-              color: #000 !important;
-              background: #fff;
-              width: ${config.width};
-              max-width: ${config.width};
-              font-weight: bold !important;
-            }
-            .ticket__header {
-              text-align: center;
-              margin-bottom: 6px;
-              font-weight: bold !important;
-            }
-            .ticket__logo {
-              display: block;
-              margin: 0 auto 5px auto;
-              max-width: 65px;
-              width: auto;
-              height: auto;
-              object-fit: contain;
-            }
-            .ticket__empresa {
-              font-weight: bold !important;
-              font-size: 13.5px;
-            }
-            .ticket__divider {
-              border-top: 1.5px dashed #000;
-              margin: 6px 0;
-            }
-            .ticket__info {
-              margin-bottom: 5px;
-              font-weight: bold !important;
-            }
-            .ticket__row {
-              display: flex;
-              justify-content: space-between;
-              gap: 4px;
-              font-weight: bold !important;
-            }
-            .ticket__row--bold {
-              font-weight: bold !important;
-              font-size: 13px;
-            }
-            .ticket__items {
-              width: 100%;
-              border-collapse: collapse;
-              font-weight: bold !important;
-            }
-            .ticket__items th {
-              font-size: 10.5px;
-              border-bottom: 1.5px solid #000;
-              padding: 3px 0;
-              text-transform: uppercase;
-              font-weight: bold !important;
-            }
-            .ticket__items td {
-              padding: 3px 0;
-              font-size: 11px;
-              vertical-align: top;
-              font-weight: bold !important;
-            }
-            .ticket__item-sub {
-              font-size: 10px;
-              color: #000 !important;
-              font-weight: bold !important;
-              margin-top: 1px;
-            }
-            .ticket__totals {
-              margin: 6px 0;
-              font-weight: bold !important;
-            }
-            .ticket__section-title {
-              font-weight: bold !important;
-              font-size: 11.5px;
-              margin-bottom: 3px;
-            }
-            .ticket__ref {
-              font-size: 10.5px;
-              color: #000 !important;
-              font-weight: bold !important;
-              padding-left: 6px;
-            }
-            .ticket__cashea-box {
-              border: 1px dashed #000 !important;
-              padding: 4px 6px !important;
-              margin: 5px 0 !important;
-            }
-            .ticket__cashea-title {
-              font-weight: bold !important;
-              font-size: 11px !important;
-              text-transform: uppercase !important;
-              border-bottom: 1px solid #000 !important;
-              padding-bottom: 2px !important;
-              margin-bottom: 4px !important;
-            }
-            .ticket__cashea-deuda {
-              margin-top: 4px !important;
-              padding-top: 3px !important;
-              border-top: 1px dotted #000 !important;
-              font-weight: bold !important;
-            }
-            .ticket__cashea-note {
-              font-size: 9px !important;
-              font-style: italic !important;
-              margin-top: 2px !important;
-              color: #000 !important;
-            }
-            .ticket__footer {
-              text-align: center;
-              margin-top: 8px;
-              font-size: 10px;
-              font-weight: bold !important;
-            }
+            ${getTicketThermalStyles(config.width)}
           </style>
         </head>
         <body>
@@ -232,6 +110,24 @@ export default function TicketFactura({ factura, onClose }) {
   };
   const tasaNum = getTasaValor();
 
+  async function handleThermalPrint() {
+    setThermalPrinting(true);
+    try {
+      await imprimirFactura({
+        ...factura,
+        empresa,
+        cliente,
+        detalles,
+        vendedor,
+        tasa,
+      });
+    } catch (err) {
+      // Toast ya gestionado en printService
+    } finally {
+      setThermalPrinting(false);
+    }
+  }
+
   return (
     <div className="ticket-overlay">
       <div className="ticket-controls no-print">
@@ -239,8 +135,16 @@ export default function TicketFactura({ factura, onClose }) {
           <span style={{ fontSize: '0.85rem', color: '#aaa', fontWeight: 'bold' }}>Formato: 80mm (Térmico)</span>
         </div>
         <div className="ticket-controls__actions">
-          <button className="btn btn--primary" onClick={handlePrint}>
-            <HiOutlinePrinter /> Imprimir Ticket
+          <button 
+            className="btn btn--primary" 
+            onClick={handleThermalPrint}
+            disabled={thermalPrinting}
+            title="Impresión instantánea silenciosa en la impresora de recibos"
+          >
+            <HiOutlineBolt /> {thermalPrinting ? 'Imprimiendo...' : 'Impresión Térmica Silenciosa'}
+          </button>
+          <button className="btn btn--secondary" onClick={handlePrint} title="Impresión con cuadro de diálogo del navegador">
+            <HiOutlinePrinter /> Navegador
           </button>
           <button className="btn btn--ghost" onClick={onClose}>
             <HiOutlineXMark /> Cerrar
@@ -320,7 +224,17 @@ export default function TicketFactura({ factura, onClose }) {
               return (
                 <tr key={i}>
                   <td style={{ textAlign: 'left' }}>
-                    {item.producto_nombre || item.nombre}
+                    <div>{item.producto_nombre || item.nombre}</div>
+                    {(item.es_combo || item.items_combo?.length > 0) && (
+                      <div className="ticket__combo-breakdown">
+                        <div style={{ textDecoration: 'underline' }}>Contiene:</div>
+                        {item.items_combo.map((ci, cIdx) => (
+                          <div key={cIdx}>
+                            - {ci.cantidad * item.cantidad}x {ci.nombre}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td style={{ textAlign: 'center' }}>{item.cantidad}</td>
                   <td style={{ textAlign: 'right' }}>{formatUSD(precio)}</td>

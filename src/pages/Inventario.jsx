@@ -9,6 +9,8 @@ import {
 } from 'react-icons/hi2';
 import ConfirmModal from '../components/common/ConfirmModal';
 import ModalImprimirEtiquetas from '../components/print/ModalImprimirEtiquetas';
+import ModalComboBuilder from '../components/inventario/ModalComboBuilder';
+import { HiOutlineSparkles } from 'react-icons/hi2';
 
 export default function Inventario() {
   const [productos, setProductos] = useState([]);
@@ -20,6 +22,8 @@ export default function Inventario() {
   const [showModal, setShowModal] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
   const [showEtiquetasModal, setShowEtiquetasModal] = useState(false);
+  const [showComboModal, setShowComboModal] = useState(false);
+  const [comboEditando, setComboEditando] = useState(null);
   const [productoParaEtiqueta, setProductoParaEtiqueta] = useState(null);
   const [editando, setEditando] = useState(null);
   const [catEditando, setCatEditando] = useState(null);
@@ -192,6 +196,13 @@ export default function Inventario() {
           <p className="page__subtitle">{productos.length} productos registrados</p>
         </div>
         <div className="page__actions">
+          <button
+            className="btn btn--secondary"
+            onClick={() => { setComboEditando(null); setShowComboModal(true); }}
+            style={{ borderColor: 'var(--primary)', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+          >
+            <HiOutlineSparkles /> Armar Combo / Bolsa
+          </button>
           <button className="btn btn--secondary" onClick={() => abrirModalEtiquetas(null)}>
             <HiOutlineTag /> Imprimir Etiquetas
           </button>
@@ -240,12 +251,37 @@ export default function Inventario() {
               {productosPaginados.map(p => (
                 <tr key={p.id}>
                   <td><code>{p.sku}</code></td>
-                  <td>{p.nombre}</td>
-                  <td>{p.categorias?.nombre || '—'}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span>{p.nombre}</span>
+                      {p.es_combo && (
+                        <span
+                          className="badge"
+                          style={{
+                            background: 'rgba(56, 189, 248, 0.15)',
+                            color: '#38bdf8',
+                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            fontSize: '0.7rem',
+                            padding: '2px 6px',
+                            fontWeight: 700,
+                          }}
+                          title={`Combo armado con ${p.items_combo?.length || 0} productos`}
+                        >
+                          COMBO
+                        </span>
+                      )}
+                    </div>
+                    {p.es_combo && p.items_combo?.length > 0 && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Contiene: {p.items_combo.map(i => `${i.cantidad}x ${i.nombre}`).join(', ')}
+                      </div>
+                    )}
+                  </td>
+                  <td>{p.es_combo ? 'Combo / Oferta' : (p.categorias?.nombre || '—')}</td>
                   <td>{formatUSD(p.precio_usd)}</td>
                   <td>
                     <span className={`badge ${p.stock <= p.stock_minimo ? (p.stock === 0 ? 'badge--danger' : 'badge--warning') : 'badge--success'}`}>
-                      {p.stock}
+                      {p.stock} {p.es_combo ? 'combos' : ''}
                     </span>
                   </td>
                   <td>
@@ -262,10 +298,21 @@ export default function Inventario() {
                       >
                         <HiOutlineTag />
                       </button>
-                      <button className="btn btn--ghost btn--xs" onClick={() => editarProducto(p)} title="Editar">
+                      <button
+                        className="btn btn--ghost btn--xs"
+                        onClick={() => {
+                          if (p.es_combo) {
+                            setComboEditando(p);
+                            setShowComboModal(true);
+                          } else {
+                            editarProducto(p);
+                          }
+                        }}
+                        title={p.es_combo ? 'Editar Combo' : 'Editar Producto'}
+                      >
                         <HiOutlinePencilSquare />
                       </button>
-                      <button className="btn btn--ghost btn--xs text-danger" onClick={() => setProdToDelete(p)} title="Eliminar Producto">
+                      <button className="btn btn--ghost btn--xs text-danger" onClick={() => setProdToDelete(p)} title="Eliminar">
                         <HiOutlineTrash />
                       </button>
                     </div>
@@ -516,6 +563,18 @@ export default function Inventario() {
           }}
         />
       )}
+
+      {/* Modal para Armar y Editar Combos / Bolsas de Comida */}
+      <ModalComboBuilder
+        isOpen={showComboModal}
+        onClose={() => {
+          setShowComboModal(false);
+          setComboEditando(null);
+        }}
+        onSuccess={loadData}
+        comboEditando={comboEditando}
+        productosDisponibles={productos}
+      />
     </div>
   );
 }

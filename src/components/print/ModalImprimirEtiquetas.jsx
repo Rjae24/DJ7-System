@@ -7,7 +7,9 @@ import {
   HiOutlineMagnifyingGlass,
   HiOutlineCheck,
   HiOutlineTag,
+  HiOutlineBolt,
 } from 'react-icons/hi2';
+import { imprimirEtiqueta } from '../../services/printService';
 
 const MEDIDAS_ETIQUETA = {
   '50x30': { label: '50 x 30 mm (Estándar Góndola)', width: '50mm', height: '30mm', barWidth: 1.3, barHeight: 30, fontSize: 10 },
@@ -47,6 +49,7 @@ export default function ModalImprimirEtiquetas({ productos = [], productoInicial
   const [medidaSeleccionada, setMedidaSeleccionada] = useState('50x30');
   const [incluirEmpresa, setIncluirEmpresa] = useState(true);
   const [tipoPapel, setTipoPapel] = useState('rollo'); // 'rollo' o 'hoja'
+  const [thermalPrinting, setThermalPrinting] = useState(false);
 
   const medida = MEDIDAS_ETIQUETA[medidaSeleccionada];
 
@@ -318,6 +321,32 @@ export default function ModalImprimirEtiquetas({ productos = [], productoInicial
         // Ignored
       }
     }, 4000);
+  };
+
+  const handleThermalPrint = async () => {
+    const seleccionadosArray = productos.filter(p => seleccionados[p.id] && (parseInt(cantidades[p.id]) || 0) > 0);
+    if (seleccionadosArray.length === 0) {
+      alert('Por favor selecciona al menos un producto con cantidad mayor a cero.');
+      return;
+    }
+
+    setThermalPrinting(true);
+    try {
+      for (const prod of seleccionadosArray) {
+        const qty = parseInt(cantidades[prod.id]) || 1;
+        await imprimirEtiqueta({
+          nombre: prod.nombre,
+          sku: prod.sku,
+          codigo_barra: prod.sku,
+          precio_usd: prod.precio_usd,
+          precio_bs: prod.precio_bs || 0,
+        }, qty);
+      }
+    } catch (err) {
+      // Error gestionado en printService
+    } finally {
+      setThermalPrinting(false);
+    }
   };
 
   return (
@@ -752,8 +781,8 @@ export default function ModalImprimirEtiquetas({ productos = [], productoInicial
               <button
                 type="button"
                 className="btn btn--primary"
-                onClick={handlePrint}
-                disabled={totalEtiquetas === 0}
+                onClick={handleThermalPrint}
+                disabled={totalEtiquetas === 0 || thermalPrinting}
                 style={{
                   width: '100%',
                   justifyContent: 'center',
@@ -761,9 +790,27 @@ export default function ModalImprimirEtiquetas({ productos = [], productoInicial
                   fontSize: '0.95rem',
                   fontWeight: 'bold',
                 }}
+                title="Envío silencioso directo a la impresora térmica de etiquetas sin cuadros de diálogo"
               >
-                <HiOutlinePrinter style={{ fontSize: '1.2rem' }} />
-                Imprimir {totalEtiquetas} {totalEtiquetas === 1 ? 'Etiqueta' : 'Etiquetas'}
+                <HiOutlineBolt style={{ fontSize: '1.2rem' }} />
+                {thermalPrinting ? 'Imprimiendo en Térmica...' : `Impresión Térmica Silenciosa (${totalEtiquetas})`}
+              </button>
+
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={handlePrint}
+                disabled={totalEtiquetas === 0 || thermalPrinting}
+                style={{
+                  width: '100%',
+                  justifyContent: 'center',
+                  padding: '10px',
+                  fontSize: '0.9rem',
+                }}
+                title="Impresión tradicional con vista previa del navegador"
+              >
+                <HiOutlinePrinter style={{ fontSize: '1.1rem' }} />
+                Vista Previa / Navegador
               </button>
 
               <button
