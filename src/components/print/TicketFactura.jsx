@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getEmpresaConfig, saveEmpresaConfig, DEFAULT_EMPRESA, PRINT_WIDTHS } from '../../utils/constants';
+import { limpiarSlogan } from '../../services/avisoPagoService';
 import { formatUSD, formatBs, formatFecha, formatTasa } from '../../utils/formatters';
-import { HiOutlinePrinter, HiOutlineXMark, HiOutlineBolt } from 'react-icons/hi2';
-import { imprimirFactura } from '../../services/printService';
+import { HiOutlinePrinter, HiOutlineXMark } from 'react-icons/hi2';
 import { getTicketThermalStyles } from './ticketFacturaStyles';
 
 export default function TicketFactura({ factura, onClose }) {
   const config = PRINT_WIDTHS['80mm'];
   const [empresa, setEmpresa] = useState(() => getEmpresaConfig());
-  const [thermalPrinting, setThermalPrinting] = useState(false);
   const logoUrl = '/logo-dj7-solo.png';
 
   useEffect(() => {
@@ -27,7 +26,7 @@ export default function TicketFactura({ factura, onClose }) {
             direccion: data.direccion ?? DEFAULT_EMPRESA.direccion,
             telefono: data.telefono ?? DEFAULT_EMPRESA.telefono,
             logo: data.logo || DEFAULT_EMPRESA.logo,
-            slogan: data.slogan ?? DEFAULT_EMPRESA.slogan,
+            slogan: limpiarSlogan(data.slogan ?? DEFAULT_EMPRESA.slogan),
           };
           setEmpresa(cfg);
           saveEmpresaConfig(cfg);
@@ -110,41 +109,19 @@ export default function TicketFactura({ factura, onClose }) {
   };
   const tasaNum = getTasaValor();
 
-  async function handleThermalPrint() {
-    setThermalPrinting(true);
-    try {
-      await imprimirFactura({
-        ...factura,
-        empresa,
-        cliente,
-        detalles,
-        vendedor,
-        tasa,
-      });
-    } catch (err) {
-      // Toast ya gestionado en printService
-    } finally {
-      setThermalPrinting(false);
-    }
-  }
-
   return (
     <div className="ticket-overlay">
       <div className="ticket-controls no-print">
         <div className="ticket-controls__options">
-          <span style={{ fontSize: '0.85rem', color: '#aaa', fontWeight: 'bold' }}>Formato: 80mm (Térmico)</span>
+          <span style={{ fontSize: '0.85rem', color: '#aaa', fontWeight: 'bold' }}>Formato: 80mm</span>
         </div>
         <div className="ticket-controls__actions">
           <button 
             className="btn btn--primary" 
-            onClick={handleThermalPrint}
-            disabled={thermalPrinting}
-            title="Impresión instantánea silenciosa en la impresora de recibos"
+            onClick={handlePrint}
+            title="Imprimir ticket en la impresora de Windows"
           >
-            <HiOutlineBolt /> {thermalPrinting ? 'Imprimiendo...' : 'Impresión Térmica Silenciosa'}
-          </button>
-          <button className="btn btn--secondary" onClick={handlePrint} title="Impresión con cuadro de diálogo del navegador">
-            <HiOutlinePrinter /> Navegador
+            <HiOutlinePrinter /> Imprimir Ticket
           </button>
           <button className="btn btn--ghost" onClick={onClose}>
             <HiOutlineXMark /> Cerrar
@@ -470,7 +447,7 @@ export default function TicketFactura({ factura, onClose }) {
 
         {/* Footer */}
         <div className="ticket__footer">
-          <p style={{ fontWeight: 'bold', marginBottom: '2px' }}>{empresa.slogan}</p>
+          <p style={{ fontWeight: 'bold', marginBottom: '2px' }}>{limpiarSlogan(empresa.slogan)}</p>
           <p style={{ fontSize: '9.5px', color: '#000', fontWeight: 'bold' }}>Documento de entrega / comprobante de venta interno</p>
         </div>
       </div>

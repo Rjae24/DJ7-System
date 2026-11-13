@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { HiOutlineBars3 } from 'react-icons/hi2';
+import AvisoCobroBanner from './AvisoCobroBanner';
 
 export default function AppLayout() {
   // Mobile drawer open state
@@ -24,6 +25,7 @@ export default function AppLayout() {
         setMobileOpen={setMobileOpen}
       />
       <div className="app-layout__content">
+        <AvisoCobroBanner />
         <header className="mobile-topbar">
           <button
             className="mobile-topbar__hamburger"

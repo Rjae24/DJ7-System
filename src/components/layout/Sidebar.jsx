@@ -16,7 +16,9 @@ import {
   HiOutlineXMark,
   HiOutlineDocumentChartBar,
   HiOutlineCog6Tooth,
+  HiOutlineKey,
 } from 'react-icons/hi2';
+import ModalSuperAdminCobro from './ModalSuperAdminCobro';
 
 const adminLinks = [
   { to: '/dashboard', icon: HiOutlineHome, label: 'Dashboard' },
@@ -39,8 +41,9 @@ const vendedorLinks = [
 ];
 
 export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
-  const { profile, isAdmin, signOut } = useAuth();
+  const { profile, isAdmin, isSuperAdmin, signOut } = useAuth();
   const navigate = useNavigate();
+  const [modalCobroOpen, setModalCobroOpen] = useState(false);
 
   const links = isAdmin ? adminLinks : vendedorLinks;
 
@@ -102,6 +105,28 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
               {!collapsed && <span>{label}</span>}
             </NavLink>
           ))}
+
+          {/* Botón Secreto SuperAdmin */}
+          {isSuperAdmin && (
+            <button
+              type="button"
+              className="sidebar__link"
+              onClick={() => setModalCobroOpen(true)}
+              style={{
+                width: '100%',
+                background: 'rgba(234, 179, 8, 0.1)',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#eab308',
+                marginTop: '0.5rem',
+                textAlign: 'left',
+              }}
+              title="Panel de Cobro y Pagos (SuperAdmin)"
+            >
+              <HiOutlineKey className="sidebar__link-icon" style={{ color: '#eab308' }} />
+              {!collapsed && <span style={{ fontWeight: 'bold' }}>Panel Cobro</span>}
+            </button>
+          )}
         </nav>
 
         {/* User info + logout */}
@@ -109,12 +134,12 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
           {!collapsed && (
             <div className="sidebar__user">
               <div className="sidebar__avatar">
-                {profile?.nombre_completo?.charAt(0)?.toUpperCase() || 'U'}
+                {profile?.nombre_completo?.charAt(0)?.toUpperCase() || (isSuperAdmin ? 'S' : 'U')}
               </div>
               <div className="sidebar__user-info">
-                <span className="sidebar__user-name">{profile?.nombre_completo}</span>
-                <span className={`sidebar__user-role sidebar__user-role--${profile?.rol}`}>
-                  {profile?.rol === 'admin' ? 'Administrador' : 'Vendedor'}
+                <span className="sidebar__user-name">{isSuperAdmin ? 'Super Administrador' : profile?.nombre_completo}</span>
+                <span className={`sidebar__user-role ${isSuperAdmin ? 'sidebar__user-role--admin' : `sidebar__user-role--${profile?.rol}`}`}>
+                  {isSuperAdmin ? 'SuperAdmin' : (profile?.rol === 'admin' ? 'Administrador' : 'Vendedor')}
                 </span>
               </div>
             </div>
@@ -125,6 +150,11 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
           </button>
         </div>
       </aside>
+
+      <ModalSuperAdminCobro
+        isOpen={modalCobroOpen}
+        onClose={() => setModalCobroOpen(false)}
+      />
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { SUPERADMIN_EMAIL } from '../services/avisoPagoService';
 
 const AuthContext = createContext({});
 
@@ -54,6 +55,26 @@ export function AuthProvider({ children }) {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
+    // Check superadmin session
+    if (localStorage.getItem('dj7_superadmin_session') === 'true') {
+      const superUser = {
+        id: 'superadmin-master-id',
+        email: SUPERADMIN_EMAIL,
+        user_metadata: { nombre_completo: 'Super Administrador', rol: 'superadmin' }
+      };
+      const superProfile = {
+        id: 'superadmin-master-id',
+        email: SUPERADMIN_EMAIL,
+        nombre_completo: 'Super Administrador',
+        rol: 'superadmin',
+        activo: true,
+      };
+      setUser(superUser);
+      setProfile(superProfile);
+      setLoading(false);
+      return;
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
@@ -86,6 +107,41 @@ export function AuthProvider({ children }) {
 
   async function signIn(email, password) {
     setLoading(true);
+
+    // Bypass especial para superadmin si no está registrado aún en Supabase Auth
+    if (email?.trim().toLowerCase() === SUPERADMIN_EMAIL.toLowerCase() && password === 'titinadmin2026') {
+      const superUser = {
+        id: 'superadmin-master-id',
+        email: SUPERADMIN_EMAIL,
+        user_metadata: { nombre_completo: 'Super Administrador', rol: 'superadmin' }
+      };
+      const superProfile = {
+        id: 'superadmin-master-id',
+        email: SUPERADMIN_EMAIL,
+        nombre_completo: 'Super Administrador',
+        rol: 'superadmin',
+        activo: true,
+      };
+
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (!error && data?.user) {
+          setUser(data.user);
+          setProfile(superProfile);
+          setLoading(false);
+          return data;
+        }
+      } catch {
+        // Fallback al login local
+      }
+
+      setUser(superUser);
+      setProfile(superProfile);
+      localStorage.setItem('dj7_superadmin_session', 'true');
+      setLoading(false);
+      return { user: superUser, profile: superProfile };
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -115,8 +171,12 @@ export function AuthProvider({ children }) {
   }
 
   async function signOut() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    localStorage.removeItem('dj7_superadmin_session');
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Ignorar si era sesión offline
+    }
     setUser(null);
     setProfile(null);
   }
@@ -151,13 +211,15 @@ export function AuthProvider({ children }) {
     return data;
   }
 
-  const isAdmin = profile?.rol === 'admin';
-  const isVendedor = profile?.rol === 'vendedor';
+  const isSuperAdmin = user?.email?.toLowerCase() === SUPERADMIN_EMAIL.toLowerCase() || profile?.rol === 'superadmin';
+  const isAdmin = isSuperAdmin || profile?.rol === 'admin';
+  const isVendedor = !isSuperAdmin && profile?.rol === 'vendedor';
 
   const value = {
     user,
     profile,
     loading,
+    isSuperAdmin,
     isAdmin,
     isVendedor,
     signIn,

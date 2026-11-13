@@ -150,6 +150,48 @@ export async function procesarEmisionFactura({
     }
   }
 
+  // Descontar inventario (soporta productos individuales y combos)
+  try {
+    for (const item of carrito) {
+      if (item.es_combo && Array.isArray(item.items_combo) && item.items_combo.length > 0) {
+        // Descontar cada producto que compone el combo
+        for (const comp of item.items_combo) {
+          const totalDescontar = (parseInt(comp.cantidad) || 1) * (parseInt(item.cantidad) || 1);
+          const { data: prodData } = await supabase
+            .from('productos')
+            .select('stock')
+            .eq('id', comp.producto_id)
+            .single();
+
+          if (prodData) {
+            const nuevoStock = Math.max(0, (prodData.stock || 0) - totalDescontar);
+            await supabase
+              .from('productos')
+              .update({ stock: nuevoStock })
+              .eq('id', comp.producto_id);
+          }
+        }
+      } else {
+        // Producto regular: descontar directamente
+        const { data: prodData } = await supabase
+          .from('productos')
+          .select('stock')
+          .eq('id', item.producto_id)
+          .single();
+
+        if (prodData) {
+          const nuevoStock = Math.max(0, (prodData.stock || 0) - (parseInt(item.cantidad) || 1));
+          await supabase
+            .from('productos')
+            .update({ stock: nuevoStock })
+            .eq('id', item.producto_id);
+        }
+      }
+    }
+  } catch (stockErr) {
+    console.error('Error al actualizar stock de productos/combos:', stockErr);
+  }
+
   return {
     factura,
     numData,

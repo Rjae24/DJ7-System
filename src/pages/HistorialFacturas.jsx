@@ -232,7 +232,15 @@ export default function HistorialFacturas() {
                 <tbody>
                   {(showDetalle.detalles || []).map(d => (
                     <tr key={d.id}>
-                      <td>{d.producto_nombre}</td>
+                      <td>
+                        <div>{d.producto_nombre}</div>
+                        {(d.es_combo || (Array.isArray(d.items_combo) && d.items_combo.length > 0)) && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>Contiene: </span>
+                            {(d.items_combo || []).map(ci => `${ci.cantidad * d.cantidad}x ${ci.nombre}`).join(', ')}
+                          </div>
+                        )}
+                      </td>
                       <td>{d.cantidad}</td>
                       <td>{formatUSD(d.precio_unitario_usd)}</td>
                       <td>{formatUSD(d.subtotal_usd || d.cantidad * d.precio_unitario_usd)}</td>

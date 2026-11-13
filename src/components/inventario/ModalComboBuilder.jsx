@@ -113,10 +113,16 @@ export default function ModalComboBuilder({
 
     setSaving(true);
     try {
+      // Generar descripción automática detallada con los productos que incluye
+      const detalleProductos = items.map(i => `${i.cantidad}x ${i.nombre}`).join(', ');
+      const descFinal = descripcion.trim()
+        ? `${descripcion.trim()} | Contiene: ${detalleProductos}`
+        : `Contiene: ${detalleProductos}`;
+
       const payload = {
         sku: sku.trim() || `CMB-${Date.now().toString().slice(-6)}`,
         nombre: nombre.trim(),
-        descripcion: descripcion.trim(),
+        descripcion: descFinal,
         precio_usd: precio,
         stock: stockPosibleCalculado,
         stock_minimo: parseInt(stockMinimo) || 5,

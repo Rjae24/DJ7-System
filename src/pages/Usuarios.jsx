@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { SUPERADMIN_EMAIL } from '../services/avisoPagoService';
 import { formatFecha } from '../utils/formatters';
 import toast from 'react-hot-toast';
 import Pagination from '../components/common/Pagination';
@@ -13,7 +14,7 @@ import {
 } from 'react-icons/hi2';
 
 export default function Usuarios() {
-  const { createUser, profile } = useAuth();
+  const { createUser, profile, isSuperAdmin } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,12 +27,16 @@ export default function Usuarios() {
   const [usuarioAEliminar, setUsuarioAEliminar] = useState(null);
   const [eliminando, setEliminando] = useState(false);
 
-  useEffect(() => { loadUsuarios(); }, []);
+  useEffect(() => { loadUsuarios(); }, [isSuperAdmin]);
 
   async function loadUsuarios() {
     setLoading(true);
     const { data } = await supabase.from('usuarios').select('*').order('created_at', { ascending: false });
-    setUsuarios(data || []);
+    const filtrados = (data || []).filter(u => {
+      const esSuper = u.email?.toLowerCase() === SUPERADMIN_EMAIL.toLowerCase() || u.rol === 'superadmin';
+      return isSuperAdmin ? true : !esSuper;
+    });
+    setUsuarios(filtrados);
     setLoading(false);
   }
 

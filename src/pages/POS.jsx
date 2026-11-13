@@ -15,10 +15,7 @@ import {
   HiOutlineXMark,
   HiOutlineUserPlus,
   HiOutlineArrowPath,
-  HiOutlineBolt,
 } from 'react-icons/hi2';
-import ModalConfigImpresoras from '../components/print/ModalConfigImpresoras';
-import { imprimirFactura, getPrinterConfig } from '../services/printService';
 import { usePosTabs } from '../components/pos/usePosTabs';
 import PosTabsBar from '../components/pos/PosTabsBar';
 import PosPaymentPanel from '../components/pos/PosPaymentPanel';
@@ -29,7 +26,6 @@ import PosCartSection from '../components/pos/PosCartSection';
 
 export default function POS() {
   const { profile, isAdmin } = useAuth();
-  const [modalImpresorasOpen, setModalImpresorasOpen] = useState(false);
 
   // Sistema de Cuentas Simultáneas y Caché persistente (Local Storage)
   const {
@@ -338,15 +334,6 @@ export default function POS() {
       };
       setFacturaEmitida(nuevaFacturaData);
 
-      try {
-        const printCfg = getPrinterConfig()?.facturas;
-        if (printCfg?.autoPrint && (printCfg?.targetPrinter || printCfg?.connectionType === 'socket')) {
-          imprimirFactura(nuevaFacturaData).catch(() => {});
-        }
-      } catch (printErr) {
-        // Silenciar error en autoPrint
-      }
-
       toast.success(`Factura ${numData} emitida correctamente`);
       limpiarCuentaActiva();
     } catch (error) {
@@ -382,13 +369,10 @@ export default function POS() {
           <div className="pos-success__actions" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.75rem' }}>
             <button 
               className="btn btn--primary" 
-              onClick={() => imprimirFactura(facturaEmitida)}
-              title="Imprimir directamente en la impresora térmica sin diálogos"
+              onClick={() => setShowTicket(true)}
+              title="Ver e imprimir ticket"
             >
-              <HiOutlineBolt /> Imprimir Térmico Directo (80mm)
-            </button>
-            <button className="btn btn--secondary" onClick={() => setShowTicket(true)}>
-              <HiOutlinePrinter /> Vista Previa
+              <HiOutlinePrinter /> Imprimir Ticket
             </button>
             <button className="btn btn--outline" onClick={nuevaVenta}>
               <HiOutlinePlus /> Nueva Venta
@@ -404,14 +388,6 @@ export default function POS() {
       <div className="page__header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <h1 className="page__title">Punto de Venta</h1>
-          <button
-            className="btn btn--secondary btn--xs"
-            onClick={() => setModalImpresorasOpen(true)}
-            title="Configurar impresoras térmicas de tickets y etiquetas"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-          >
-            <HiOutlinePrinter /> Configurar Impresora
-          </button>
         </div>
         {tasaHoy && (
           <div className="pos-tasa" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -537,11 +513,6 @@ export default function POS() {
           </div>
         </div>
       </div>
-
-      <ModalConfigImpresoras
-        isOpen={modalImpresorasOpen}
-        onClose={() => setModalImpresorasOpen(false)}
-      />
     </div>
   );
 }
