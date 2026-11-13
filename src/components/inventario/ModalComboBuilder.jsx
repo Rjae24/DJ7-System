@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatUSD } from '../../utils/formatters';
 import toast from 'react-hot-toast';
@@ -21,14 +21,49 @@ export default function ModalComboBuilder({
   comboEditando = null,
   productosDisponibles = [],
 }) {
-  const [sku, setSku] = useState(comboEditando?.sku || '');
-  const [nombre, setNombre] = useState(comboEditando?.nombre || '');
-  const [descripcion, setDescripcion] = useState(comboEditando?.descripcion || '');
-  const [precioUsd, setPrecioUsd] = useState(comboEditando ? comboEditando.precio_usd.toString() : '');
-  const [stockMinimo, setStockMinimo] = useState(comboEditando ? comboEditando.stock_minimo.toString() : '5');
-  const [items, setItems] = useState(comboEditando?.items_combo || []);
+  const [sku, setSku] = useState('');
+  const [nombre, setNombre] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [precioUsd, setPrecioUsd] = useState('');
+  const [stockMinimo, setStockMinimo] = useState('5');
+  const [items, setItems] = useState([]);
   const [searchProd, setSearchProd] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Sincronizar el estado cada vez que se abre el modal o cambia el combo a editar
+  useEffect(() => {
+    if (isOpen) {
+      if (comboEditando) {
+        setSku(comboEditando.sku || '');
+        setNombre(comboEditando.nombre || '');
+        setDescripcion(comboEditando.descripcion || '');
+        setPrecioUsd(comboEditando.precio_usd ? comboEditando.precio_usd.toString() : '');
+        setStockMinimo(comboEditando.stock_minimo ? comboEditando.stock_minimo.toString() : '5');
+        
+        // Manejar items_combo si es array o si viene como string JSON desde la BD
+        let itemsIniciales = [];
+        if (Array.isArray(comboEditando.items_combo)) {
+          itemsIniciales = comboEditando.items_combo;
+        } else if (typeof comboEditando.items_combo === 'string' && comboEditando.items_combo.trim()) {
+          try {
+            itemsIniciales = JSON.parse(comboEditando.items_combo);
+          } catch (e) {
+            console.error('Error parseando items_combo:', e);
+            itemsIniciales = [];
+          }
+        }
+        setItems(itemsIniciales || []);
+      } else {
+        setSku('');
+        setNombre('');
+        setDescripcion('');
+        setPrecioUsd('');
+        setStockMinimo('5');
+        setItems([]);
+      }
+      setSearchProd('');
+    }
+  }, [isOpen, comboEditando]);
 
   // Filtrar productos seleccionables (solo productos regulares, no combos recursivos)
   const prodsCandidatos = useMemo(() => {
